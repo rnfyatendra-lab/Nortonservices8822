@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="center">
+    <form id="loginForm" autocomplete="off" onsubmit="return false;">
+      <h2>Login</h2>
+
+      <label>
+        Login id
+        <input id="loginId" placeholder="Login id" />
+      </label>
+
+      <label>
+        Password
+        <input id="loginPass" type="password" placeholder="Password" />
+      </label>
+
+      <div class="login-actions">
+        <button id="loginBtn" type="button">Login</button>
+      </div>
+
+      <small>
+        Use: Login id - <strong>YatendraSingh@#</strong> | Password - <strong>YatendraSingh@</strong>
+      </small>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const id = document.getElementById('loginId').value.trim();
+      const pw = document.getElementById('loginPass').value;
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ id, pw })
+        });
+        const j = await res.json();
+        if (j.ok) {
+          window.location = '/launcher.html';
+        } else {
+          alert('❌ Wrong credentials');
+        }
+      } catch (e) {
+        alert('Network error');
+        console.error(e);
+      }
+    });
+
+    // Allow pressing Enter to submit on login form
+    document.getElementById('loginPass').addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') document.getElementById('loginBtn').click();
+    });
+  </script>
+</body>
+</html>
