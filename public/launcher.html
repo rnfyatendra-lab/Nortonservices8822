@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bulk Mail Launcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Bulk Mail - Dashboard</h1>
+      <div class="user">Logged in as: <strong id="loggedName">YatendraSingh@#</strong></div>
+    </header>
+
+    <main>
+      <form id="mailForm" autocomplete="off" onsubmit="return false;">
+        <div class="grid">
+          <label>
+            Name
+            <input id="name" placeholder="Aapka naam (optional)" />
+          </label>
+
+          <label>
+            Sender Email
+            <input id="senderEmail" placeholder="example@gmail.com" />
+          </label>
+
+          <label>
+            App Password
+            <input id="appPassword" placeholder="Gmail app password" type="password" />
+          </label>
+
+          <label>
+            Subject
+            <input id="subject" placeholder="Mail ka subject" />
+          </label>
+
+          <label>
+            Template
+            <textarea id="template" placeholder="Yahan template likhen. Use {{name}} to replace name." rows="5"></textarea>
+          </label>
+
+          <label>
+            Bulk Email (manually paste — one per line or comma separated)
+            <textarea id="bulkEmails" placeholder="email1@gmail.com&#10;email2@gmail.com" rows="5"></textarea>
+          </label>
+
+          <div class="actions-left">
+            <button id="sendAllBtn" class="icon-btn" type="button">
+              <span id="sendIcon">📤</span> <span id="sendLabel">Send All</span>
+            </button>
+          </div>
+
+          <div class="actions-right">
+            <button id="logoutBtn" class="icon-btn" type="button" title="Double-click to logout">
+              <span id="logoutIcon">🔒</span> Logout
+            </button>
+          </div>
+        </div>
+      </form>
+    </main>
+
+    <!-- popup -->
+    <div id="popup" class="popup hidden"></div>
+
+    <footer>
+      <small>
+        Note: No attachments or CSV upload. Paste bulk emails manually. Uses Gmail app password.
+      </small>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
