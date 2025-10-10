@@ -1,50 +1,49 @@
-<!doctype html>
-<html lang="hi">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Login</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="center">
-    <form id="loginForm" autocomplete="off" onsubmit="return false;">
-      <h2>Login</h2>
+  <div class="login-shell">
+    <div class="login-card">
+      <h2 class="login-title">Login</h2>
 
-      <label>
-        Login id
-        <input id="loginId" placeholder="Login id" />
-      </label>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required />
+        </div>
 
-      <label>
-        Password
-        <input id="loginPass" type="password" placeholder="Password" />
-      </label>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required />
+        </div>
 
-      <div class="login-actions">
-        <button id="loginBtn" type="button">Login</button>
-      </div>
-
-      <small>
-        Use: Login id - <strong>YatendraSingh@#</strong> | Password - <strong>YatendraSingh@</strong>
-      </small>
-    </form>
+        <button type="submit" class="btn primary">Login</button>
+      </form>
+    </div>
   </div>
 
   <script>
-    document.getElementById('loginBtn').addEventListener('click', async () => {
-      const id = document.getElementById('loginId').value.trim();
-      const pw = document.getElementById('loginPass').value;
-      const res = await fetch('/login', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ id, pw })
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
+      const res = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
       });
-      const j = await res.json();
-      if (j.ok) {
-        window.location = '/launcher.html';
+      const result = await res.json();
+
+      if (result.success) {
+        window.location.href = "/launcher";
       } else {
-        alert('❌ Wrong credentials');
+        alert(result.message || "❌ Login Failed");
       }
     });
   </script>
