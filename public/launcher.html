@@ -1,52 +1,58 @@
-<!doctype html>
-<html lang="hi">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Bulk Mail Launcher</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Bulk Mail - Dashboard</h1>
-      <div class="user">Logged in as: <strong>YatendraSingh@#</strong></div>
-    </header>
+  <div class="landscape-shell">
+    <div class="landscape-card">
+      <h2 class="landscape-title">Bulk Mail Launcher</h2>
 
-    <main>
-      <form id="mailForm" autocomplete="off" onsubmit="return false;">
-        <div class="grid">
-          <label>Name <input id="name" placeholder="Your name" /></label>
-          <label>Sender Email <input id="senderEmail" placeholder="you@gmail.com" /></label>
+      <form id="mailForm" class="landscape-grid">
+        <!-- Row 1 -->
+        <div class="form-group">
+          <label for="senderName">Name</label>
+          <input type="text" id="senderName" name="senderName" required />
+        </div>
+        <div class="form-group">
+          <label for="senderEmail">Sender Email</label>
+          <input type="email" id="senderEmail" name="senderEmail" required />
+        </div>
 
-          <label>App Password <input id="appPassword" type="password" placeholder="App password" /></label>
-          <label>Subject <input id="subject" placeholder="Mail subject" /></label>
+        <!-- Row 2 -->
+        <div class="form-group">
+          <label for="appPassword">App Password</label>
+          <input type="password" id="appPassword" name="appPassword" required />
+        </div>
+        <div class="form-group">
+          <label for="subject">Subject</label>
+          <input type="text" id="subject" name="subject" required />
+        </div>
 
-          <label>Template
-            <textarea id="template" rows="4" placeholder="Write message template..."></textarea>
-          </label>
-          <label>Bulk Email
-            <textarea id="bulkEmails" rows="4" placeholder="Paste manually (one per line or comma separated)"></textarea>
-          </label>
+        <!-- Row 3 -->
+        <div class="form-group">
+          <label for="message">Template</label>
+          <textarea id="message" name="message" required></textarea>
+        </div>
+        <div class="form-group">
+          <label for="recipients">Bulk Email</label>
+          <textarea id="recipients" name="recipients" required></textarea>
+        </div>
 
-          <div class="actions-left">
-            <button id="sendAllBtn" class="icon-btn" type="button">
-              <span id="sendIcon">📤</span> <span id="sendLabel">Send All</span>
-            </button>
-          </div>
-          <div class="actions-right">
-            <button id="logoutBtn" class="icon-btn" type="button">
-              <span id="logoutIcon">🔒</span> Logout
-            </button>
-          </div>
+        <!-- Row 4 -->
+        <div class="form-group">
+          <button type="submit" id="sendBtn" class="btn primary">Send All</button>
+        </div>
+        <div class="form-group">
+          <button type="button" id="logoutBtn" class="btn primary">Logout</button>
         </div>
       </form>
-    </main>
-
-    <div id="popup" class="popup hidden"></div>
-
-    <footer><small>No CSV uploads — manual paste only. Uses Gmail App Password.</small></footer>
+    </div>
   </div>
+
   <script src="script.js"></script>
 </body>
 </html>
