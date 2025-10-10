@@ -35,27 +35,17 @@
     document.getElementById('loginBtn').addEventListener('click', async () => {
       const id = document.getElementById('loginId').value.trim();
       const pw = document.getElementById('loginPass').value;
-      try {
-        const res = await fetch('/login', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ id, pw })
-        });
-        const j = await res.json();
-        if (j.ok) {
-          window.location = '/launcher.html';
-        } else {
-          alert('❌ Wrong credentials');
-        }
-      } catch (e) {
-        alert('Network error');
-        console.error(e);
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id, pw })
+      });
+      const j = await res.json();
+      if (j.ok) {
+        window.location = '/launcher.html';
+      } else {
+        alert('❌ Wrong credentials');
       }
-    });
-
-    // Allow pressing Enter to submit on login form
-    document.getElementById('loginPass').addEventListener('keyup', (e) => {
-      if (e.key === 'Enter') document.getElementById('loginBtn').click();
     });
   </script>
 </body>
