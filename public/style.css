@@ -9,8 +9,4 @@ h2{text-align:center;margin-bottom:20px;color:#111827}
 .grid-row button{border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;transition:0.3s}
 .grid-row button:hover{background:#2563eb}
 #statusMessage,#loginStatus{font-size:13px;color:#111;margin-top:6px;text-align:center;white-space:pre-wrap}
-
-/* landscape: give a bit more width */
-@media (orientation: landscape){
-  .form-box,.form-grid{width:1000px}
-}
+@media (orientation: landscape){ .form-box,.form-grid{width:1000px} }
