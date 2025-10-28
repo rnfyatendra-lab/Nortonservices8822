@@ -17,7 +17,8 @@
 <script>
 const $ = id => document.getElementById(id);
 $('loginBtn').addEventListener('click', async () => {
-  const u = $('username').value.trim(), p = $('password').value.trim();
+  const u = $('username').value.trim();
+  const p = $('password').value.trim();
   $('loginStatus').innerText = '';
   if (!u || !p) { $('loginStatus').innerText = 'Enter credentials'; return; }
   try {
@@ -26,8 +27,8 @@ $('loginBtn').addEventListener('click', async () => {
     if (j.success) location.href = '/launcher';
     else $('loginStatus').innerText = j.message || 'Login failed';
   } catch (e) {
+    console.error('Login fetch error', e);
     $('loginStatus').innerText = 'Server error';
-    console.error(e);
   }
 });
 </script>
