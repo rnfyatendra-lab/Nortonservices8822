@@ -1,210 +1,150 @@
-/**
- * server.js
- * SMTP-only bulk mailer (Gmail app password or other SMTP credentials sent from client).
- * - Concurrency worker pool (default 30)
- * - Retries with exponential backoff + jitter
- * - Dedupe & validation
- * - List-Unsubscribe header support
- * - Does NOT persist SMTP passwords
- *
- * Usage: place this file at project root. Install dependencies listed below.
- */
-
+// server.js
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const validator = require('validator');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const os = require('os');
+const validator = require('validator');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Admin (login) defaults (you said earlier to keep these)
+// Admin credentials (as requested)
 const ADMIN_USER = 'Yatendra';
 const ADMIN_PASS = '@#Yatendra';
 
 // Middlewares
-app.use(helmet());
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(session({ secret: 'session-secret-short', resave: false, saveUninitialized: false }));
-app.use(rateLimit({ windowMs: 60 * 1000, max: 200 }));
+app.use(session({ secret: 'short-secret', resave: false, saveUninitialized: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Helpers
-function log(...args){ console.log(new Date().toISOString(), ...args); }
-function isValidEmail(e){ return validator.isEmail(String(e||'').trim()); }
-function dedupe(arr){
-  const s = new Set();
-  return arr.map(x => String(x||'').trim()).filter(Boolean).filter(x => {
-    const L = x.toLowerCase();
-    if(s.has(L)) return false;
-    s.add(L); return true;
-  });
-}
-function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-function backoffDelay(attempt, base=300){
-  // attempt 1 -> base*1 + jitter; attempt 2 -> base*2 + jitter etc
-  const expo = Math.pow(2, Math.max(0, attempt-1));
-  const jitter = Math.floor(Math.random() * base);
-  return base * expo + jitter;
-}
+const isEmail = e => validator.isEmail(String(e || '').trim());
+const dedupe = arr => {
+  const seen = new Set();
+  return arr.map(s => String(s || '').trim())
+            .filter(Boolean)
+            .filter(x => { const L = x.toLowerCase(); if (seen.has(L)) return false; seen.add(L); return true; });
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const backoff = (attempt, base = 300) => base * Math.pow(2, Math.max(0, attempt - 1)) + Math.floor(Math.random() * base);
 
 // Auth middleware
-function requireAuth(req,res,next){
-  if(req.session && req.session.user) return next();
-  if(req.headers.accept && req.headers.accept.includes('application/json')) return res.status(401).json({ success:false, message:'Unauthorized' });
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user) return next();
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
   return res.redirect('/');
 }
 
-// Routes: login/launcher/logout
-app.get('/', (req,res) => res.sendFile(path.join(__dirname,'public','login.html')));
-app.post('/login', (req,res) => {
-  const u = String(req.body.username||'').trim();
-  const p = String(req.body.password||'').trim();
-  if(!u||!p) return res.status(400).json({ success:false, message:'Missing' });
-  if(u === ADMIN_USER && p === ADMIN_PASS){ req.session.user = u; log('Login ok:', u); return res.json({ success:true }); }
-  return res.status(401).json({ success:false, message:'Invalid' });
+// Routes - login & launcher
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.post('/login', (req, res) => {
+  const u = String(req.body.username || '').trim();
+  const p = String(req.body.password || '').trim();
+  if (!u || !p) return res.status(400).json({ success: false, message: 'Missing' });
+  if (u === ADMIN_USER && p === ADMIN_PASS) {
+    req.session.user = u;
+    return res.json({ success: true });
+  }
+  return res.status(401).json({ success: false, message: 'Invalid' });
 });
-app.get('/launcher', requireAuth, (req,res) => res.sendFile(path.join(__dirname,'public','launcher.html')));
-app.post('/logout', (req,res) => { const user=req.session.user; req.session.destroy(()=>{ res.clearCookie('connect.sid'); log('Logout', user); res.json({ success:true }); }); });
+app.get('/launcher', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'launcher.html')));
+app.post('/logout', (req, res) => req.session.destroy(() => res.json({ success: true })));
 
-// Core: /sendBulk - SMTP-only implementation
-/**
- * POST /sendBulk
- * Body:
- *  {
- *    senderName, smtpUser, smtpPass, fromEmail, subject, text, html(optional), recipients,
- *    concurrency (optional), retries (optional), listUnsubscribe (optional)
- *  }
- *
- * Response: { success: boolean, total, successCount, failCount, failures[] }
- *
- * IMPORTANT: smtpUser/smtpPass are accepted from client but NOT stored.
- */
-app.post('/sendBulk', requireAuth, async (req,res) => {
-  try{
+// Core: bulk send via SMTP (concurrent workers, retries)
+app.post('/sendBulk', requireAuth, async (req, res) => {
+  try {
     const body = req.body || {};
-    const senderName = String(body.senderName||'').trim();
-    // Accept SMTP credentials from client (Gmail app password recommended)
-    const smtpUser = String(body.smtpUser||'').trim();
-    const smtpPass = String(body.smtpPass||'').trim();
-    // fromEmail: prefer explicit, otherwise use smtpUser
+    const smtpUser = String(body.smtpUser || '').trim();   // gmail id
+    const smtpPass = String(body.smtpPass || '').trim();   // app password
     const fromEmail = String(body.fromEmail || smtpUser || '').trim();
-    const subject = String(body.subject||'').trim();
-    const text = String(body.text||'').trim();
-    const html = body.html ? String(body.html) : null;
-    const listUnsubscribe = body.listUnsubscribe ? String(body.listUnsubscribe) : null;
+    const senderName = String(body.senderName || 'Anonymous').trim();
+    const subject = String(body.subject || '').trim();
+    const text = String(body.text || '').trim();
+    const raw = String(body.recipients || '');
+    if (!smtpUser || !smtpPass) return res.status(400).json({ success: false, message: 'SMTP credentials required' });
+    if (!fromEmail) return res.status(400).json({ success: false, message: 'From email required' });
+    if (!raw) return res.status(400).json({ success: false, message: 'Recipients required' });
 
-    if(!smtpUser || !smtpPass) return res.status(400).json({ success:false, message:'SMTP credentials required' });
-    if(!fromEmail) return res.status(400).json({ success:false, message:'From email required' });
+    // parse, dedupe, validate
+    const parsed = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    let recipients = dedupe(parsed).filter(isEmail);
+    if (recipients.length === 0) return res.status(400).json({ success: false, message: 'No valid recipients' });
 
-    // recipients parsing + dedupe + validation
-    const rawRecipients = String(body.recipients || '');
-    if(!rawRecipients) return res.status(400).json({ success:false, message:'Recipients required' });
-    const parsed = rawRecipients.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
-    let recipients = dedupe(parsed).filter(isValidEmail);
-    if(recipients.length === 0) return res.status(400).json({ success:false, message:'No valid recipients' });
+    // safety cap
+    const MAX = 2000;
+    if (recipients.length > MAX) recipients = recipients.slice(0, MAX);
 
-    // Safety caps
-    const MAX_RECIPIENTS = 2000;
-    if(recipients.length > MAX_RECIPIENTS) recipients = recipients.slice(0, MAX_RECIPIENTS);
-
-    // concurrency & retries
     const concurrency = Number.isInteger(body.concurrency) ? Math.max(1, Math.min(100, body.concurrency)) : 30;
     const retries = Number.isInteger(body.retries) ? Math.max(0, Math.min(5, body.retries)) : 3;
 
-    log('sendBulk start', { fromEmail, count: recipients.length, concurrency, retries, host: os.hostname() });
-
-    // create a single SMTP transporter (re-used) with nodemailer
+    // create transporter (re-used)
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
-      auth: { user: smtpUser, pass: smtpPass },
-      // pool: true // intentionally not using nodemailer's pool, we implement our own concurrency
+      auth: { user: smtpUser, pass: smtpPass }
     });
 
-    // verify transport before heavy work
-    try { await transporter.verify(); log('SMTP verify OK'); }
-    catch(verifyErr){ log('SMTP verify failed', verifyErr && verifyErr.message); return res.status(400).json({ success:false, message:'SMTP auth/verify failed: '+ (verifyErr && verifyErr.message) }); }
+    // verify once
+    try { await transporter.verify(); }
+    catch (e) { return res.status(400).json({ success: false, message: 'SMTP auth/verify failed: ' + (e.message || e) }); }
 
     // worker pool
     const results = []; // { to, ok, attempts, error? }
     let idx = 0;
 
-    async function worker(){
-      while(true){
+    async function worker() {
+      while (true) {
         const i = idx++;
-        if(i >= recipients.length) return;
+        if (i >= recipients.length) return;
         const to = recipients[i];
-
-        let attempt = 0;
-        let sent = false;
-        let lastErr = null;
-
-        while(attempt <= retries && !sent){
+        let attempt = 0, sent = false, lastErr = null;
+        while (attempt <= retries && !sent) {
           attempt++;
-          try{
-            // build message
+          try {
             const mail = {
-              from: `"${senderName || 'Anonymous'}" <${fromEmail}>`,
+              from: `"${senderName}" <${fromEmail}>`,
               to,
               subject,
               text,
               headers: {}
             };
-            if(html) mail.html = html;
-            if(listUnsubscribe) mail.headers['List-Unsubscribe'] = `<${listUnsubscribe}>`;
-
             await transporter.sendMail(mail);
             sent = true;
-            results.push({ to, ok:true, attempts: attempt });
-            // tiny random pause to reduce bursts
-            await sleep(Math.floor(Math.random() * 30));
-          }catch(err){
+            results.push({ to, ok: true, attempts: attempt });
+            // small pause to avoid burst
+            await sleep(Math.floor(Math.random() * 40));
+          } catch (err) {
             lastErr = err;
-            const delayMs = backoffDelay(attempt, 200);
-            log(`Send attempt ${attempt} failed for ${to}, delaying ${delayMs}ms:`, err && err.message ? err.message : err);
-            await sleep(delayMs);
+            const d = backoff(attempt, 200);
+            await sleep(d);
           }
-        } // attempts
-
-        if(!sent){
-          results.push({ to, ok:false, attempts: attempt-1, error: lastErr ? String(lastErr.message || lastErr) : 'Unknown' });
         }
+        if (!sent) results.push({ to, ok: false, attempts: Math.max(0, attempt - 1), error: lastErr ? String(lastErr.message || lastErr) : 'Unknown' });
       }
     }
 
-    // start workers
-    const workerCount = Math.min(concurrency, recipients.length);
-    const pool = [];
-    for(let w=0; w<workerCount; w++) pool.push(worker());
-    await Promise.all(pool);
+    const workers = [];
+    const poolSize = Math.min(concurrency, recipients.length);
+    for (let w = 0; w < poolSize; w++) workers.push(worker());
+    await Promise.all(workers);
 
-    // close transporter
-    try{ transporter.close(); }catch(e){ /* ignore */ }
+    // close transporter if possible
+    try { transporter.close(); } catch (e) {}
 
     const successCount = results.filter(r => r.ok).length;
     const failCount = results.length - successCount;
-    log('sendBulk finished', { total: results.length, successCount, failCount });
+    // return full summary (client will show single popup)
+    return res.json({ success: failCount === 0, total: results.length, successCount, failCount, failures: results.filter(r=>!r.ok).slice(0,100) });
 
-    // limit failures details
-    const failures = results.filter(r => !r.ok).map(r => ({ to: r.to, error: r.error })).slice(0, 200);
-
-    return res.json({ success: failCount === 0, total: results.length, successCount, failCount, failures });
-
-  }catch(err){
-    log('sendBulk error', err && err.message ? err.message : err);
-    return res.status(500).json({ success:false, message: err && err.message ? err.message : 'Server error' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err && err.message ? err.message : 'Server error' });
   }
 });
 
-// optional status endpoint
-app.get('/status', (req,res) => res.json({ ok:true, host: os.hostname() }));
-
-app.listen(PORT, () => log('Server listening on port', PORT));
+// start
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
