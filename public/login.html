@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
 <title>Login — Fast Mailer</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -15,36 +15,18 @@
 </div>
 
 <script>
-document.getElementById('loginBtn').addEventListener('click', async (ev) => {
-  try {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
-
-    if (!username || !password) {
-      document.getElementById('loginStatus').innerText = 'Username and password required';
-      return;
-    }
-
-    const res = await fetch('/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-
-    const data = await res.json();
-
-    if (data && data.success) {
-      // redirect to launcher
-      window.location.href = '/launcher';
-    } else {
-      const message = (data && data.message) ? data.message : 'Login failed';
-      document.getElementById('loginStatus').innerText = message;
-      console.warn('Login failed:', message);
-    }
-  } catch (err) {
-    console.error('Login error:', err);
-    document.getElementById('loginStatus').innerText = 'Error connecting to server';
-  }
+const status = id=>document.getElementById(id);
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const u = status('username').value.trim();
+  const p = status('password').value.trim();
+  status('loginStatus').innerText = '';
+  if(!u||!p){ status('loginStatus').innerText='Enter credentials'; return; }
+  try{
+    const r = await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j = await r.json();
+    if(j.success) location.href = '/launcher';
+    else status('loginStatus').innerText = j.message || 'Login failed';
+  }catch(e){ status('loginStatus').innerText = 'Server error'; console.error(e); }
 });
 </script>
 </body>
