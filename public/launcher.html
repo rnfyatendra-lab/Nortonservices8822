@@ -1,27 +1,36 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Launcher</title><link rel="stylesheet" href="style.css"></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fast Mail Launcher</title>
+<link rel="stylesheet" href="style.css">
+</head>
 <body>
-  <div class="form-grid">
-    <h2>📧 Fast Mail Launcher</h2>
-    <div class="grid-row">
-      <input id="senderName" placeholder="Sender Name">
-      <input id="email" placeholder="Your Gmail">
-    </div>
-    <div class="grid-row">
-      <input id="pass" type="password" placeholder="App Password">
-      <input id="subject" placeholder="Subject">
-    </div>
-    <div class="grid-row">
-      <textarea id="message" placeholder="Message Body"></textarea>
-      <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
-    </div>
-    <div class="grid-row">
-      <button id="sendBtn">Send All</button>
-      <button id="logoutBtn">Logout</button>
-    </div>
-    <p id="statusMessage" style="display:none"></p>
+<div class="form-grid">
+  <h2>📧 Fast Mail Launcher</h2>
+
+  <div class="grid-row">
+    <input id="senderName" placeholder="Sender Name">
+    <input id="email" placeholder="Your Gmail (smtp user)">
   </div>
+
+  <div class="grid-row">
+    <input id="pass" type="password" placeholder="App Password (smtp pass)">
+    <input id="subject" placeholder="Subject">
+  </div>
+
+  <div class="grid-row">
+    <textarea id="message" placeholder="Message Body (plain text)"></textarea>
+    <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
+  </div>
+
+  <div class="grid-row">
+    <button id="sendBtn">Send All</button>
+    <button id="logoutBtn">Logout</button>
+  </div>
+
+  <p id="statusMessage" style="display:none"></p>
+</div>
 <script src="script.js"></script>
 </body>
 </html>
