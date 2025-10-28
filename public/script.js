@@ -1,8 +1,7 @@
-// public/script.js (client)
-// Single popup at end; if authError -> show invalid app password
+// public/script.js - client for /sendBulk
 const $ = id => document.getElementById(id);
 
-$('logoutBtn')?.addEventListener('click', ()=> fetch('/logout',{method:'POST'}).then(()=>location.href='/'));
+$('logoutBtn')?.addEventListener('click', ()=> fetch('/logout', { method:'POST' }).then(()=> location.href = '/'));
 
 $('sendBtn')?.addEventListener('click', async () => {
   const senderName = $('senderName')?.value || '';
@@ -12,7 +11,7 @@ $('sendBtn')?.addEventListener('click', async () => {
   const text = $('message')?.value || '';
   const recipients = ($('recipients')?.value || '').trim();
 
-  if (!smtpUser || !smtpPass || !recipients) { alert('Enter email, app password and recipients'); return; }
+  if(!smtpUser || !smtpPass || !recipients) { alert('Enter email, app password and recipients'); return; }
 
   const payload = {
     senderName,
@@ -22,7 +21,7 @@ $('sendBtn')?.addEventListener('click', async () => {
     subject,
     text,
     recipients,
-    concurrency: 10, // tuned for reliability
+    concurrency: 10,
     retries: 5
   };
 
@@ -32,23 +31,23 @@ $('sendBtn')?.addEventListener('click', async () => {
   btn.innerText = 'Sending...';
 
   try {
-    const res = await fetch('/sendBulk', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const res = await fetch('/sendBulk', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
     const j = await res.json();
 
-    if (j && j.authError) {
-      // invalid app password case
-      alert('✘ Invalid app password');
-    } else if (j && j.success) {
-      alert('✅ Mail sent');
-    } else if (j) {
-      const failCount = typeof j.failCount === 'number' ? j.failCount : (j.failures ? j.failures.length : 'unknown');
-      alert(`✘ Some mails failed (${failCount})`);
-    } else {
-      alert('✘ Some mails failed (unknown)');
+    // if auth false -> app password likely wrong
+    if (j && j.auth === false) {
+      alert('✘ App password incorrect or SMTP auth failed');
+      return;
     }
 
-  } catch (e) {
-    console.error(e);
+    if (j && j.success) {
+      alert('✅ Mail sent');
+    } else {
+      const fail = (j && typeof j.failCount === 'number') ? j.failCount : (j && j.failures ? j.failures.length : 'unknown');
+      alert(`✘ Some mails failed (${fail})`);
+    }
+  } catch (err) {
+    console.error('sendBulk client err', err);
     alert('✘ Some mails failed (network/server error)');
   } finally {
     btn.disabled = false;
