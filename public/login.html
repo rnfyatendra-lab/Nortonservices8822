@@ -17,16 +17,18 @@
 <script>
 const $ = id => document.getElementById(id);
 $('loginBtn').addEventListener('click', async () => {
-  const u = $('username').value.trim();
-  const p = $('password').value.trim();
+  const u = $('username').value.trim(), p = $('password').value.trim();
   $('loginStatus').innerText = '';
-  if(!u || !p){ $('loginStatus').innerText = 'Enter credentials'; return; }
+  if (!u || !p) { $('loginStatus').innerText = 'Enter credentials'; return; }
   try {
     const r = await fetch('/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: u, password: p }) });
     const j = await r.json();
-    if(j.success) location.href = '/launcher';
+    if (j.success) location.href = '/launcher';
     else $('loginStatus').innerText = j.message || 'Login failed';
-  } catch(e) { $('loginStatus').innerText = 'Server error'; console.error(e); }
+  } catch (e) {
+    $('loginStatus').innerText = 'Server error';
+    console.error(e);
+  }
 });
 </script>
 </body>
