@@ -2,30 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Fast Mail Launcher</title>
+<title>Login — Fast Mailer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="form-grid">
-  <h2>📧 Fast Mail Launcher</h2>
-  <div class="grid-row">
-    <input id="senderName" placeholder="Sender Name">
-    <input id="email" placeholder="Your Gmail">
-  </div>
-  <div class="grid-row">
-    <input id="pass" type="password" placeholder="App Password">
-    <input id="subject" placeholder="Subject">
-  </div>
-  <div class="grid-row">
-    <textarea id="message" placeholder="Message Body"></textarea>
-    <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
-  </div>
-  <div class="grid-row">
-    <button id="sendBtn">Send All</button>
-    <button id="logoutBtn">Logout</button>
-  </div>
-  <p id="statusMessage" style="display:none"></p>
+<div class="form-box">
+  <h2>🔒 Login</h2>
+  <input id="username" placeholder="Username" autocomplete="username">
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="loginBtn">Login</button>
+  <p id="loginStatus"></p>
 </div>
-<script src="script.js"></script>
+<script>
+const el=id=>document.getElementById(id);
+el('loginBtn').addEventListener('click', async ()=>{
+  const u=el('username').value.trim(), p=el('password').value.trim();
+  el('loginStatus').innerText='';
+  if(!u||!p){ el('loginStatus').innerText='Enter credentials'; return; }
+  try{
+    const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j=await r.json();
+    if(j.success) location.href='/launcher';
+    else el('loginStatus').innerText=j.message||'Login failed';
+  }catch(e){ el('loginStatus').innerText='Server error'; }
+});
+</script>
 </body>
 </html>
