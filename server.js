@@ -1,31 +1,51 @@
 // server.js
-'use strict';
-
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const validator = require('validator');
 
 const app = express();
-const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
+const PORT = process.env.PORT || 8080;
 
-// Admin creds (as you requested)
-const ADMIN_USER = 'Yatendra';
-const ADMIN_PASS = '@#Yatendra';
+// original hardcoded credentials (from your first code)
+const HARD_USERNAME = "Yatendra Rajput";
+const HARD_PASSWORD = "Yattu@882";
 
 // Middlewares
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
-  secret: 'short-session-secret',
+  secret: process.env.SESSION_SECRET || 'bulk-mailer-secret',
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true }
 }));
 
-// Serve static files (public)
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// He
+// Simple request logger (helps debugging)
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.url);
+  next();
+});
+
+// Auth middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user) return next();
+  // if ajax/fetch expecting json, return json 401
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  return res.redirect('/');
+}
+
+// Routes
+app.get('/', (req, res) => {
+  return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/login', (req, res) => {
+  t
