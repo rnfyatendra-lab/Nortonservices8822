@@ -2,12 +2,13 @@ const $ = id => document.getElementById(id);
 
 $('logoutBtn')?.addEventListener('click', ()=> fetch('/logout',{ method:'POST' }).then(()=> location.href = '/'));
 
+// sendBulk client
 $('sendBtn')?.addEventListener('click', async () => {
   const senderName = $('senderName')?.value || '';
   const smtpUser = ($('email')?.value || '').trim();
   const smtpPass = ($('pass')?.value || '').trim();
-  const subject = $('subject')?.value || '';
-  const text = $('message')?.value || '';
+  const subject = ($('subject')?.value || '').trim();
+  const text = ($('message')?.value || '').trim();
   const recipients = ($('recipients')?.value || '').trim();
 
   if (!smtpUser || !smtpPass || !recipients) { alert('Enter email, app password and recipients'); return; }
@@ -40,9 +41,10 @@ $('sendBtn')?.addEventListener('click', async () => {
     } else {
       const fail = (j && typeof j.failCount === 'number') ? j.failCount : (j && j.failures ? j.failures.length : 'unknown');
       alert(`✘ Some mails failed (${fail})`);
+      console.log('Details:', j);
     }
-  } catch (err) {
-    console.error('sendBulk client error', err);
+  } catch (e) {
+    console.error('sendBulk error', e);
     alert('✘ Some mails failed (network/server error)');
   } finally {
     btn.disabled = false;
