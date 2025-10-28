@@ -1,8 +1,11 @@
 {
-  "name": "fast-mailer",
+  "name": "fast-mailer-min",
   "version": "1.0.0",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js",
+    "diagnose": "node -e \"console.log('node', process.version);console.log('cwd', process.cwd());\""
+  },
   "dependencies": {
     "express": "^4.18.2",
     "express-session": "^1.17.3",
