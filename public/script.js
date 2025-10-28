@@ -1,57 +1,52 @@
-// public/script.js - client for /sendBulk
+// public/script.js
 const $ = id => document.getElementById(id);
 
-$('logoutBtn')?.addEventListener('click', ()=>fetch('/logout',{method:'POST'}).then(()=>location.href='/'));
+$('logoutBtn')?.addEventListener('click', ()=> fetch('/logout',{method:'POST'}).then(()=>location.href='/'));
 
 $('sendBtn')?.addEventListener('click', async ()=>{
   const senderName = $('senderName')?.value || '';
-  const fromEmail = ($('email')?.value || '').trim();
-  const password = ($('pass')?.value || '').trim(); // optional if using server-side SMTP env or SendGrid
+  const smtpUser = ($('email')?.value || '').trim();       // Gmail id (will be used for SMTP)
+  const smtpPass = ($('pass')?.value || '').trim();       // app password
   const subject = $('subject')?.value || '';
   const text = $('message')?.value || '';
   const recipients = ($('recipients')?.value || '').trim();
 
-  if(!fromEmail || !recipients) { alert('Enter From email and recipients'); return; }
+  if(!smtpUser || !smtpPass || !recipients){ alert('Enter email, app password and recipients'); return; }
 
-  // You can pass concurrency and retries if you want; else server defaults
+  // prepare payload: you can add concurrency/retries if desired
   const payload = {
     senderName,
-    fromEmail,
-    // NOTE: prefer server-side SendGrid; but if you want SMTP user/pass to be used by server,
-    // you may send them here — however it's recommended to set SMTP credentials as environment variables on server.
-    // We'll send password only if present (optional).
-    ...(password ? { smtpPasswordClientProvided: password } : {}),
+    smtpUser,
+    smtpPass,
+    fromEmail: smtpUser,
     subject,
     text,
     recipients,
-    // optional tuning
-    concurrency: 30,
+    concurrency: 30,  // server will cap to safe ranges
     retries: 3,
-    listUnsubscribe: '' // optional URL or mailto: for unsubscribe
+    listUnsubscribe: '' // optional
   };
 
-  // disable button and show Sending...
   const btn = $('sendBtn');
+  const orig = btn.innerText;
   btn.disabled = true;
-  const origText = btn.innerText;
   btn.innerText = 'Sending...';
 
-  try {
-    const res = await fetch('/sendBulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  try{
+    const res = await fetch('/sendBulk', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
     const j = await res.json();
 
-    // single popup according to your rule
-    if (j && j.success) {
+    if(j && j.success){
       alert('✅ Mail sent');
     } else {
-      const failCount = (j && j.failCount) ? j.failCount : (j && j.failures ? j.failures.length : 'unknown');
+      const failCount = j && typeof j.failCount === 'number' ? j.failCount : (j && j.failures ? j.failures.length : 'unknown');
       alert(`✘ Some mails failed (${failCount})`);
     }
-  } catch (err) {
+  }catch(err){
     console.error('sendBulk error', err);
     alert('✘ Some mails failed (network/server error)');
-  } finally {
+  }finally{
     btn.disabled = false;
-    btn.innerText = origText || 'Send All';
+    btn.innerText = orig || 'Send All';
   }
 });
