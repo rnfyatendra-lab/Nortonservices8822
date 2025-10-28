@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Login — Fast Mailer</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <title>Login — Fast Mailer</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="form-box">
@@ -24,7 +24,10 @@ $('loginBtn').addEventListener('click', async () => {
     const j = await r.json();
     if (j.success) location.href = '/launcher';
     else $('loginStatus').innerText = j.message || 'Login failed';
-  } catch (e) { $('loginStatus').innerText = 'Server error'; console.error(e); }
+  } catch (e) {
+    $('loginStatus').innerText = 'Server error';
+    console.error(e);
+  }
 });
 </script>
 </body>
