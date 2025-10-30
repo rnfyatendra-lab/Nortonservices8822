@@ -1,33 +1,31 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Login — Fast Mailer</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8">
+<title>Login — Fast Mailer</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="form-box">
-    <h2>🔒 Login</h2>
-    <input id="username" placeholder="Username" autocomplete="username">
-    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
-    <button id="loginBtn">Login</button>
-    <p id="loginStatus"></p>
-  </div>
-
+<div class="form-box">
+  <h2>🔒 Login</h2>
+  <input id="username" placeholder="Username" autocomplete="username">
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="loginBtn">Login</button>
+  <p id="loginStatus"></p>
+</div>
 <script>
 const $ = id => document.getElementById(id);
-$('loginBtn').addEventListener('click', async () => {
-  const u = $('username').value.trim();
-  const p = $('password').value.trim();
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const u = $('username').value.trim(), p = $('password').value.trim();
   $('loginStatus').innerText = '';
   if (!u || !p) { $('loginStatus').innerText = 'Enter credentials'; return; }
   try {
-    const r = await fetch('/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: u, password: p }) });
-    const j = await r.json();
+    const res = await fetch('/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+    const j = await res.json();
     if (j.success) location.href = '/launcher';
     else $('loginStatus').innerText = j.message || 'Login failed';
   } catch (e) {
-    console.error('Login fetch error', e);
+    console.error('login fetch err', e);
     $('loginStatus').innerText = 'Server error';
   }
 });
