@@ -1,7 +1,7 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <title>Fast Mail Launcher</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -11,25 +11,25 @@
 
   <div class="grid-row">
     <input id="senderName" placeholder="Sender Name">
-    <input id="email" placeholder="Your Gmail (smtp user)">
+    <input id="email" placeholder="Your Gmail">
   </div>
 
   <div class="grid-row">
-    <input id="pass" type="password" placeholder="App Password (smtp pass)">
+    <input id="pass" type="password" placeholder="App Password">
     <input id="subject" placeholder="Subject">
   </div>
 
   <div class="grid-row">
-    <textarea id="message" placeholder="Message Body (plain text)"></textarea>
+    <textarea id="message" placeholder="Message Body"></textarea>
     <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
   </div>
 
   <div class="grid-row">
     <button id="sendBtn">Send All</button>
-    <button id="logoutBtn">Logout</button>
+    <button onclick="logout()">Logout</button>
   </div>
 
-  <p id="statusMessage" style="display:none"></p>
+  <p id="statusMessage"></p>
 </div>
 
 <script src="script.js"></script>
