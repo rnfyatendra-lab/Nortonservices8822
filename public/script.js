@@ -2,7 +2,6 @@ const $ = id => document.getElementById(id);
 
 $('logoutBtn')?.addEventListener('click', ()=> fetch('/logout',{ method:'POST' }).then(()=> location.href = '/'));
 
-// sendBulk client
 $('sendBtn')?.addEventListener('click', async () => {
   const senderName = $('senderName')?.value || '';
   const smtpUser = ($('email')?.value || '').trim();
@@ -21,8 +20,9 @@ $('sendBtn')?.addEventListener('click', async () => {
     subject,
     text,
     recipients,
-    concurrency: 10,
-    retries: 3
+    concurrency: 5,
+    retries: 5,
+    batchPause: 500
   };
 
   const btn = $('sendBtn');
@@ -39,12 +39,15 @@ $('sendBtn')?.addEventListener('click', async () => {
     } else if (j && j.success) {
       alert('✅ Mail sent');
     } else {
+      const total = j && j.totalAttempted ? j.totalAttempted : 'unknown';
       const fail = (j && typeof j.failCount === 'number') ? j.failCount : (j && j.failures ? j.failures.length : 'unknown');
-      alert(`✘ Some mails failed (${fail})`);
-      console.log('Details:', j);
+      const blocked = j && typeof j.blockedCount === 'number' ? j.blockedCount : (j && j.failures ? j.failures.filter(f=>f.blocked).length : 0);
+      alert(`✘ Some mails failed. sent:${j.successCount || 0} failed:${fail} blocked:${blocked}`);
+      console.log('Invalid domains (MX failed):', j.invalidDomains || []);
+      console.log('Failures:', j.failures || j);
     }
   } catch (e) {
-    console.error('sendBulk error', e);
+    console.error('sendBulk fetch err', e);
     alert('✘ Some mails failed (network/server error)');
   } finally {
     btn.disabled = false;
