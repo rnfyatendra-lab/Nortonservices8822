@@ -1,6 +1,6 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Login</title><link rel="stylesheet" href="style.css"></head>
+<head><meta charset="utf-8"><title>Login — Fast Mailer</title><link rel="stylesheet" href="style.css"></head>
 <body>
   <div class="form-box">
     <h2>🔒 Login</h2>
@@ -10,17 +10,14 @@
     <p id="loginStatus"></p>
   </div>
 <script>
-const $ = id => document.getElementById(id);
-$('loginBtn').onclick = async ()=>{
-  const u = $('username').value.trim(), p = $('password').value.trim();
-  $('loginStatus').innerText = '';
+const $=id=>document.getElementById(id);
+$('loginBtn').onclick=async()=>{
+  const u=$('username').value.trim(), p=$('password').value.trim();
+  $('loginStatus').innerText='';
   try{
-    const r = await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
-    const j = await r.json();
-    if (j.success) location.href = '/launcher';
-    else $('loginStatus').innerText = j.message || 'Login failed';
-  }catch(e){ $('loginStatus').innerText = 'Server error'; }
+    const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const j=await r.json(); if(j.success) location.href='/launcher'; else $('loginStatus').innerText=j.message||'Login failed';
+  }catch{ $('loginStatus').innerText='Server error'; }
 };
 </script>
-</body>
-</html>
+</body></html>
