@@ -1,82 +1,60 @@
-// send_bulk_ses.js
-// Usage: node send_bulk_ses.js
-// WARNING: Use only with verified sending domain and SES quota.
+// FAST-MODE Bulk Mailer (25 parallel, ~0.2s batch)
+'use strict';
+const express=require('express'),session=require('express-session');
+const body=require('body-parser'),path=require('path'),nodemailer=require('nodemailer');
 
-const nodemailer = require('nodemailer');
-const fs = require('fs');
+const app=express(),PORT=process.env.PORT||8080;
+const APP_USER='nortonservices8822',APP_PASS='services8822';
 
-// CONFIG - set these via ENV or config file in production
-const SMTP_HOST = process.env.SMTP_HOST || 'email-smtp.us-east-1.amazonaws.com'; // SES SMTP endpoint
-const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465;
-const SMTP_USER = process.env.SMTP_USER || 'YOUR_SES_SMTP_USER';
-const SMTP_PASS = process.env.SMTP_PASS || 'YOUR_SES_SMTP_PASS';
-const FROM = process.env.FROM || 'you@yourdomain.com';
-const FROM_NAME = process.env.FROM_NAME || 'Your Name';
+app.use(body.json());app.use(body.urlencoded({extended:true}));
+app.use(session({secret:'fast-mailer',resave:false,saveUninitialized:false}));
+app.use(express.static(path.join(__dirname,'public')));
 
-// Batch settings
-const BATCH_SIZE = 25;             // 25 emails per batch (parallel)
-const BATCH_INTERVAL_MS = 216000;  // ~216 seconds (3.6 min) between batches to reach 10k/day with 25 batch size
-const RETRIES = 3;
-const RECIPIENTS_FILE = './recipients.txt'; // newline-separated list
+const okEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'').trim());
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-// Load recipients
-const recipients = fs.readFileSync(RECIPIENTS_FILE, 'utf8').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+function needAuth(req,res,next){if(req.session?.u)return next();res.redirect('/');}
+app.get('/',(_,res)=>res.sendFile(path.join(__dirname,'public','login.html')));
+app.post('/login',(req,res)=>{
+  const {username,password}=req.body||{};
+  if(username===APP_USER&&password===APP_PASS){req.session.u=username;return res.json({success:true});}
+  res.status(401).json({success:false,message:'Invalid credentials'});
+});
+app.get('/launcher',needAuth,(_,res)=>res.sendFile(path.join(__dirname,'public','launcher.html')));
+app.post('/logout',needAuth,(req,res)=>req.session.destroy(()=>res.json({success:true})));
 
-// Setup transporter (SES SMTP)
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_PORT === 465,
-  auth: { user: SMTP_USER, pass: SMTP_PASS },
-  pool: true, // enable pooling to reuse connections
-  maxMessages: Infinity
+// --- FAST Bulk Sender ---
+app.post('/sendBulk',needAuth,async(req,res)=>{
+  try{
+    const b=req.body||{};
+    const smtpUser=String(b.smtpUser||'').trim(),smtpPass=String(b.smtpPass||'').trim();
+    const fromEmail=String(b.fromEmail||smtpUser||'').trim();
+    const senderName=(String(b.senderName||'Sender').replace(/"/g,'')).trim();
+    const subject=String(b.subject||'(no subject)'),text=String(b.text||'');
+    if(!smtpUser||!smtpPass)return res.json({success:false,message:'SMTP required'});
+    const list=[...new Set(String(b.recipients||'').split(/[\n,;]+/).map(s=>s.trim()).filter(okEmail))];
+    if(!list.length)return res.json({success:false,message:'No valid recipients'});
+
+    const tx=nodemailer.createTransport({
+      host:'smtp.gmail.com',port:465,secure:true,
+      auth:{user:smtpUser,pass:smtpPass}
+    });
+    try{await tx.verify();}catch(e){return res.json({success:false,auth:false,message:'SMTP auth failed'});}
+
+    const results=[];const batchSize=25; // parallel 25 mails
+    for(let i=0;i<list.length;i+=batchSize){
+      const batch=list.slice(i,i+batchSize);
+      const promises=batch.map(to=>tx.sendMail({
+        from:`"${senderName}" <${fromEmail}>`,
+        to,subject,text,html:text.replace(/\n/g,'<br>')
+      }).then(()=>({to,ok:true})).catch(e=>({to,ok:false,error:e.message})));
+      const settled=await Promise.allSettled(promises);
+      settled.forEach(x=>results.push(x.value||{ok:false}));
+      await sleep(200); // 0.2 sec delay between batches
+    }
+    const ok=results.filter(r=>r.ok).length,bad=results.length-ok;
+    res.json({success:bad===0,total:results.length,successCount:ok,failCount:bad});
+  }catch(e){console.error(e);res.status(500).json({success:false,message:'Server error'});}
 });
 
-// Helper send with retry
-async function sendOne(to, subject, text) {
-  for (let attempt = 1; attempt <= RETRIES; attempt++) {
-    try {
-      await transporter.sendMail({
-        from: `"${FROM_NAME}" <${FROM}>`,
-        to,
-        subject,
-        text
-      });
-      return { to, ok: true };
-    } catch (err) {
-      console.error(`Error sending to ${to} attempt ${attempt}:`, err && err.message);
-      // transient? wait and retry
-      if (attempt < RETRIES) {
-        const wait = Math.pow(2, attempt) * 1000 + Math.floor(Math.random()*1000);
-        await new Promise(r => setTimeout(r, wait));
-      } else {
-        return { to, ok: false, error: err && err.message };
-      }
-    }
-  }
-}
-
-// Send batches
-async function runBatches() {
-  console.log(`Total recipients: ${recipients.length}`);
-  let idx = 0;
-  while (idx < recipients.length) {
-    const batch = recipients.slice(idx, idx + BATCH_SIZE);
-    console.log(`Sending batch ${Math.floor(idx/BATCH_SIZE)+1} - ${batch.length} recipients`);
-    // map to promises (parallel inside batch)
-    const promises = batch.map(r => sendOne(r, 'Quick question', 'Hi,\n\nI had a small suggestion for your website — may I share it?\n\nThanks,\nYour Name'));
-    const results = await Promise.all(promises);
-    const success = results.filter(r => r.ok).length;
-    const fail = results.filter(r => !r.ok).length;
-    console.log(`Batch result: success=${success}, fail=${fail}`);
-    idx += BATCH_SIZE;
-    if (idx < recipients.length) {
-      console.log(`Waiting ${BATCH_INTERVAL_MS/1000}s before next batch...`);
-      await new Promise(r => setTimeout(r, BATCH_INTERVAL_MS));
-    }
-  }
-  console.log('All batches finished');
-  transporter.close();
-}
-
-runBatches().catch(e => { console.error('Fatal error', e); transporter.close(); });
+app.listen(PORT,()=>console.log('Fast server on http://localhost:'+PORT));
