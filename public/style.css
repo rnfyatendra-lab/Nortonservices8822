@@ -1,9 +1,8 @@
 *{box-sizing:border-box;margin:0;padding:0;font-family:Segoe UI,Arial,sans-serif}
 body{display:flex;align-items:center;justify-content:center;height:100vh;background:#f0f4f8;padding:20px}
-.form-box,.form-grid{width:800px;max-width:95%;background:#fff;padding:22px;border-radius:12px;box-shadow:0 10px 20px rgba(0,0,0,.08)}
-h2{text-align:center;margin-bottom:16px;color:#111827}
-.grid-row{display:flex;gap:12px;margin-bottom:12px}
-.grid-row input,.grid-row textarea,.grid-row button{flex:1;padding:10px;border-radius:8px;border:1px solid #d0d7de;font-size:14px}
-.grid-row textarea{min-height:110px;resize:vertical}
-.grid-row button{background:#2563eb;color:#fff;border:none;font-weight:600;cursor:pointer}
-.grid-row button:hover{opacity:.95}
+.form-box,.form-grid{width:800px;max-width:95%;background:#fff;padding:20px;border-radius:10px;box-shadow:0 10px 20px rgba(0,0,0,0.08)}
+h2{text-align:center;margin-bottom:12px}
+.grid-row{display:flex;gap:10px;margin-bottom:10px}
+.grid-row input,.grid-row textarea,.grid-row button{flex:1;padding:10px;border-radius:8px;border:1px solid #d0d7de}
+.grid-row textarea{min-height:100px;resize:vertical}
+.grid-row button{background:#2563eb;color:#fff;border:none;cursor:pointer}
