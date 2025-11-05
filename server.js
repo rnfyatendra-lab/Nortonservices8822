@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
@@ -9,34 +8,42 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Hardcoded login
-const HARD_USERNAME = "Yatendra Rajput";
-const HARD_PASSWORD = "Yattu@882";
+// Public folder path (Render safe)
+const PUBLIC_DIR = path.join(process.cwd(), "public");
+
+// ✅ Login Credentials
+const HARD_USERNAME = "Yatendra-Lodhi";
+const HARD_PASSWORD = "bulk-mailing";
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(PUBLIC_DIR));
 
 app.use(session({
-  secret: 'bulk-mailer-secret',
+  secret: process.env.SESSION_SECRET || 'bulk-mailer-secret',
   resave: false,
-  saveUninitialized: true
+  saveUninitialized: true,
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000
+  }
 }));
 
-// 🔒 Auth middleware
 function requireAuth(req, res, next) {
-  if (req.session.user) return next();
+  if (req.session?.user) return next();
   return res.redirect('/');
 }
 
 // Routes
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
 });
 
 app.post('/login', (req, res) => {
-  const { username, password } = req.body;
+  const username = req.body.username?.trim();
+  const password = req.body.password?.trim();
+
   if (username === HARD_USERNAME && password === HARD_PASSWORD) {
     req.session.user = username;
     return res.json({ success: true });
@@ -45,7 +52,12 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/launcher', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'launcher.html'));
+});
+
+// Optional: auth status (useful if ever needed)
+app.get('/auth/check', (req, res) => {
+  res.json({ authenticated: !!req.session?.user });
 });
 
 app.post('/logout', (req, res) => {
@@ -55,44 +67,30 @@ app.post('/logout', (req, res) => {
   });
 });
 
-// Helper function for delay
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+// Delay helper
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
-// Helper function for batch sending
+// Batch sender
 async function sendBatch(transporter, mails, batchSize = 5) {
-  const results = [];
   for (let i = 0; i < mails.length; i += batchSize) {
     const batch = mails.slice(i, i + batchSize);
-    const promises = batch.map(mail => transporter.sendMail(mail));
-    const settled = await Promise.allSettled(promises);
-    results.push(...settled);
-
-    // Small pause between batches to avoid Gmail rate-limit
-    await delay(200); // 0.2 sec pause
+    await Promise.allSettled(batch.map(m => transporter.sendMail(m)));
+    await delay(200);
   }
-  return results;
 }
 
-// ✅ Bulk Mail Sender with fast batch sending
+// Bulk Email API
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
-    if (!email || !password || !recipients) {
+
+    if (!email || !password || !recipients)
       return res.json({ success: false, message: "Email, password and recipients required" });
-    }
 
-    const recipientList = recipients
-      .split(/[\n,]+/)
-      .map(r => r.trim())
-      .filter(r => r);
-
-    if (recipientList.length === 0) {
+    const list = recipients.split(/[\n,]+/).map(r => r.trim()).filter(Boolean);
+    if (!list.length)
       return res.json({ success: false, message: "No valid recipients" });
-    }
 
-    // ✅ Single transporter
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -100,26 +98,24 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Prepare mails
-    const mails = recipientList.map(r => ({
+    const mails = list.map(r => ({
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
       subject: subject || "No Subject",
       text: message || ""
     }));
 
-    // Send mails in batches (parallel within batch)
-    await sendBatch(transporter, mails, 5); // 5 mails parallel
-
-    return res.json({ success: true, message: `✅ Mail sent to ${recipientList.length}` });
+    await sendBatch(transporter, mails, 5);
+    return res.json({ success: true, message: `✅ Mail sent to ${list.length}` });
 
   } catch (err) {
-    console.error("Send error:", err);
     return res.json({ success: false, message: err.message });
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Fallback
+app.use((req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
 });
+
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
