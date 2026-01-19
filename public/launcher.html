@@ -5,6 +5,16 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<script>
+  const ONE_HOUR = 60 * 60 * 1000;
+  const loginTime = localStorage.getItem("loginTime");
+  if (!loginTime || Date.now() - Number(loginTime) > ONE_HOUR) {
+    localStorage.removeItem("loginTime");
+    location.replace("/login.html");
+  }
+</script>
+
 <div class="page">
   <div class="card">
     <h2 class="title">📧 Secure Mail Console</h2>
@@ -23,9 +33,10 @@
       <button id="logoutBtn">Logout</button>
     </div>
 
-    <div id="limitText" class="limit-text">0/28</div>
+    <div id="limitText" class="limit-text">0 / 28</div>
   </div>
 </div>
+
 <script src="script.js"></script>
 </body>
 </html>
