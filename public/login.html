@@ -15,11 +15,9 @@
 <script>
 function login(){
   if (uid.value && upass.value) {
-    localStorage.setItem("loginTime", Date.now().toString());
+    localStorage.setItem("loginTime", Date.now());
     location.replace("/launcher.html");
-  } else {
-    alert("Invalid credentials");
-  }
+  } else alert("Invalid credentials");
 }
 </script>
 </body>
