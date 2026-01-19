@@ -15,28 +15,26 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* ===== SPEED & LIMITS (UNCHANGED) ===== */
-const HOURLY_LIMIT = 28;   // per Gmail / hour
-const PARALLEL = 3;       // SAME SPEED
-const DELAY_MS = 120;     // SAME SPEED
+/* ===== SPEED & LIMITS (EXACT SAME) ===== */
+const HOURLY_LIMIT = 28;
+const PARALLEL = 3;     // SAME
+const DELAY_MS = 120;   // SAME
 
-/* Gmail-wise counters */
+/* In-memory hourly counters */
 let stats = {};
 setInterval(() => { stats = {}; }, 60 * 60 * 1000);
 
 /* ===== SAFE HELPERS ===== */
 
-/* Subject: keep natural, remove spammy patterns */
+/* Subject: minimal cleanup, no manipulation */
 function safeSubject(subject) {
   return subject
     .replace(/\r?\n/g, " ")
     .replace(/\s{2,}/g, " ")
-    .replace(/([!?])\1+/g, "$1")
-    .replace(/\b(free|urgent|act now|guarantee|win|offer)\b/gi, "")
     .trim();
 }
 
-/* Body: plain text only + footer after 3 blank lines */
+/* Body: plain text + footer (3 blank lines) */
 function safeBody(message) {
   const clean = message
     .replace(/\r\n/g, "\n")
@@ -46,12 +44,12 @@ function safeBody(message) {
   return `${clean}\n\n\nScanned & secured`;
 }
 
-/* Email sanity (light) */
+/* Light email validation */
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
-/* ===== SEND ENGINE (HUMAN-LIKE) ===== */
+/* ===== SEND ENGINE (HUMAN-LIKE, STABLE) ===== */
 async function sendSafely(transporter, mails) {
   let sent = 0;
 
@@ -77,6 +75,7 @@ app.post("/send", async (req, res) => {
     return res.json({ success: false, msg: "Missing fields", count: 0 });
   }
 
+  /* Hourly limit per Gmail */
   if (!stats[gmail]) stats[gmail] = { count: 0 };
   if (stats[gmail].count >= HOURLY_LIMIT) {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
@@ -92,13 +91,13 @@ app.post("/send", async (req, res) => {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
 
-  /* Gmail-safe transporter */
+  /* Gmail-official SMTP (no hacks) */
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    pool: true,              // reuse connections (stable)
-    maxConnections: 3,       // SAME speed profile
+    pool: true,            // stable reuse
+    maxConnections: 3,     // SAME speed
     maxMessages: 30,
     auth: { user: gmail, pass: apppass },
     tls: { rejectUnauthorized: true }
@@ -111,15 +110,12 @@ app.post("/send", async (req, res) => {
   }
 
   const mails = recipients.map(r => ({
-    from: `"${senderName}" <${gmail}>`,
+    from: `"${senderName}" <${gmail}>`, // real sender only
     to: r,
     subject: safeSubject(subject),
-    text: safeBody(message),     // TEXT ONLY = best inbox odds
-    replyTo: `"${senderName}" <${gmail}>`,
-    headers: {
-      "X-Mailer": "CleanMailer",
-      "X-Priority": "3"
-    }
+    text: safeBody(message),            // TEXT ONLY
+    replyTo: gmail
+    // ❌ no tracking, ❌ no custom spammy headers
   }));
 
   const sent = await sendSafely(transporter, mails);
@@ -135,5 +131,5 @@ app.post("/send", async (req, res) => {
 
 /* ===== START ===== */
 app.listen(3000, () => {
-  console.log("Server running — ultra-safe inbox mode");
+  console.log("Server running — real-world safe mode");
 });
