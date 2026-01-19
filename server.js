@@ -15,45 +15,61 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* ===== LIMIT CONFIG ===== */
-const HOURLY_LIMIT = 28;
-const PARALLEL = 3;   // FAST
-const DELAY_MS = 120;
+/* ===== SPEED & LIMITS (UNCHANGED) ===== */
+const HOURLY_LIMIT = 28;   // per Gmail / hour
+const PARALLEL = 3;       // SAME SPEED
+const DELAY_MS = 120;     // SAME SPEED
 
+/* Gmail-wise counters */
 let stats = {};
+setInterval(() => { stats = {}; }, 60 * 60 * 1000);
 
-/* AUTO RESET EVERY 1 HOUR */
-setInterval(() => {
-  stats = {};
-  console.log("Hourly limit reset");
-}, 60 * 60 * 1000);
+/* ===== SAFE HELPERS ===== */
 
-/* SUBJECT SAFE */
-function safeSubject(s) {
-  return s.replace(/\r?\n/g, " ").trim();
+/* Subject: keep natural, remove spammy patterns */
+function safeSubject(subject) {
+  return subject
+    .replace(/\r?\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/([!?])\1+/g, "$1")
+    .replace(/\b(free|urgent|act now|guarantee|win|offer)\b/gi, "")
+    .trim();
 }
 
-/* BODY + FOOTER */
-function safeBody(m) {
-  const clean = m.replace(/\r\n/g, "\n").trimEnd();
+/* Body: plain text only + footer after 3 blank lines */
+function safeBody(message) {
+  const clean = message
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
   return `${clean}\n\n\nScanned & secured`;
 }
 
-/* SEND ENGINE */
+/* Email sanity (light) */
+function isValidEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+}
+
+/* ===== SEND ENGINE (HUMAN-LIKE) ===== */
 async function sendSafely(transporter, mails) {
   let sent = 0;
+
   for (let i = 0; i < mails.length; i += PARALLEL) {
     const batch = mails.slice(i, i + PARALLEL);
-    const res = await Promise.allSettled(
+
+    const results = await Promise.allSettled(
       batch.map(m => transporter.sendMail(m))
     );
-    res.forEach(r => r.status === "fulfilled" && sent++);
+
+    results.forEach(r => r.status === "fulfilled" && sent++);
     await new Promise(r => setTimeout(r, DELAY_MS));
   }
+
   return sent;
 }
 
-/* SEND API */
+/* ===== SEND API ===== */
 app.post("/send", async (req, res) => {
   const { senderName, gmail, apppass, to, subject, message } = req.body;
 
@@ -62,7 +78,6 @@ app.post("/send", async (req, res) => {
   }
 
   if (!stats[gmail]) stats[gmail] = { count: 0 };
-
   if (stats[gmail].count >= HOURLY_LIMIT) {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
@@ -70,20 +85,23 @@ app.post("/send", async (req, res) => {
   const recipients = to
     .split(/,|\r?\n/)
     .map(r => r.trim())
-    .filter(r => r.includes("@"));
+    .filter(isValidEmail);
 
   const remaining = HOURLY_LIMIT - stats[gmail].count;
-  if (recipients.length > remaining) {
+  if (recipients.length === 0 || recipients.length > remaining) {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
 
+  /* Gmail-safe transporter */
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    pool: true,
-    maxConnections: 3,
-    auth: { user: gmail, pass: apppass }
+    pool: true,              // reuse connections (stable)
+    maxConnections: 3,       // SAME speed profile
+    maxMessages: 30,
+    auth: { user: gmail, pass: apppass },
+    tls: { rejectUnauthorized: true }
   });
 
   try {
@@ -96,8 +114,12 @@ app.post("/send", async (req, res) => {
     from: `"${senderName}" <${gmail}>`,
     to: r,
     subject: safeSubject(subject),
-    text: safeBody(message),
-    replyTo: gmail
+    text: safeBody(message),     // TEXT ONLY = best inbox odds
+    replyTo: `"${senderName}" <${gmail}>`,
+    headers: {
+      "X-Mailer": "CleanMailer",
+      "X-Priority": "3"
+    }
   }));
 
   const sent = await sendSafely(transporter, mails);
@@ -111,7 +133,7 @@ app.post("/send", async (req, res) => {
   });
 });
 
-/* START */
+/* ===== START ===== */
 app.listen(3000, () => {
-  console.log("Safe Mail Server running on 3000");
+  console.log("Server running — ultra-safe inbox mode");
 });
