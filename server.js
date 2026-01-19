@@ -15,51 +15,45 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* ===== SPEED & LIMITS ===== */
+/* ===== LIMIT CONFIG ===== */
 const HOURLY_LIMIT = 28;
-const PARALLEL = 3;      // FAST & SAFE
-const DELAY_MS = 120;    // FAST & SAFE
+const PARALLEL = 3;   // FAST
+const DELAY_MS = 120;
 
 let stats = {};
-setInterval(() => { stats = {}; }, 60 * 60 * 1000);
 
-/* ===== SAFE SUBJECT ===== */
-function safeSubject(subject) {
-  return subject
-    .replace(/\r?\n/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/free|urgent|act now|guarantee/gi, "")
-    .trim();
+/* AUTO RESET EVERY 1 HOUR */
+setInterval(() => {
+  stats = {};
+  console.log("Hourly limit reset");
+}, 60 * 60 * 1000);
+
+/* SUBJECT SAFE */
+function safeSubject(s) {
+  return s.replace(/\r?\n/g, " ").trim();
 }
 
-/* ===== SAFE BODY + FOOTER ===== */
-function safeBody(message) {
-  const clean = message
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-
+/* BODY + FOOTER */
+function safeBody(m) {
+  const clean = m.replace(/\r\n/g, "\n").trimEnd();
   return `${clean}\n\n\nScanned & secured`;
 }
 
-/* ===== SEND ENGINE ===== */
+/* SEND ENGINE */
 async function sendSafely(transporter, mails) {
   let sent = 0;
-
   for (let i = 0; i < mails.length; i += PARALLEL) {
     const batch = mails.slice(i, i + PARALLEL);
-
-    const results = await Promise.allSettled(
+    const res = await Promise.allSettled(
       batch.map(m => transporter.sendMail(m))
     );
-
-    results.forEach(r => r.status === "fulfilled" && sent++);
+    res.forEach(r => r.status === "fulfilled" && sent++);
     await new Promise(r => setTimeout(r, DELAY_MS));
   }
   return sent;
 }
 
-/* ===== SEND API ===== */
+/* SEND API */
 app.post("/send", async (req, res) => {
   const { senderName, gmail, apppass, to, subject, message } = req.body;
 
@@ -68,15 +62,20 @@ app.post("/send", async (req, res) => {
   }
 
   if (!stats[gmail]) stats[gmail] = { count: 0 };
+
   if (stats[gmail].count >= HOURLY_LIMIT) {
-    return res.json({ success: false, msg: "Hourly limit reached", count: stats[gmail].count });
+    return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
 
   const recipients = to
     .split(/,|\r?\n/)
     .map(r => r.trim())
-    .filter(r => r.includes("@"))
-    .slice(0, HOURLY_LIMIT - stats[gmail].count);
+    .filter(r => r.includes("@"));
+
+  const remaining = HOURLY_LIMIT - stats[gmail].count;
+  if (recipients.length > remaining) {
+    return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
+  }
 
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -90,7 +89,7 @@ app.post("/send", async (req, res) => {
   try {
     await transporter.verify();
   } catch {
-    return res.json({ success: false, msg: "Invalid App Password", count: stats[gmail].count });
+    return res.json({ success: false, msg: "Wrong Password ❌", count: stats[gmail].count });
   }
 
   const mails = recipients.map(r => ({
@@ -104,10 +103,15 @@ app.post("/send", async (req, res) => {
   const sent = await sendSafely(transporter, mails);
   stats[gmail].count += sent;
 
-  res.json({ success: true, sent, count: stats[gmail].count });
+  return res.json({
+    success: true,
+    msg: "Mail sent ✅",
+    sent,
+    count: stats[gmail].count
+  });
 });
 
-/* ===== START ===== */
+/* START */
 app.listen(3000, () => {
-  console.log("✅ Safe Mail Server running");
+  console.log("Safe Mail Server running on 3000");
 });
