@@ -1,12 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
   let sending = false;
 
-  const sendBtn = document.getElementById("sendBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const limitText = document.getElementById("limitText");
-
   sendBtn.onclick = async () => {
     if (sending) return;
+
     sending = true;
     sendBtn.disabled = true;
     sendBtn.innerText = "Sending…";
@@ -27,9 +24,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json();
       limitText.innerText = `${data.count || 0} / 28`;
-      alert(data.success ? `Sent: ${data.sent}` : data.msg);
+      alert(data.msg || `Sent: ${data.sent}`);
     } catch {
-      alert("Network error");
+      alert("Network error ❌");
     }
 
     sending = false;
