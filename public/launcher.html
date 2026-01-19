@@ -7,12 +7,9 @@
 <body>
 
 <script>
-  const ONE_HOUR = 60 * 60 * 1000;
-  const loginTime = localStorage.getItem("loginTime");
-  if (!loginTime || Date.now() - Number(loginTime) > ONE_HOUR) {
-    localStorage.removeItem("loginTime");
-    location.replace("/login.html");
-  }
+const ONE_HOUR = 60 * 60 * 1000;
+const t = localStorage.getItem("loginTime");
+if (!t || Date.now() - t > ONE_HOUR) location.replace("/login.html");
 </script>
 
 <div class="page">
@@ -25,7 +22,7 @@
       <input id="apppass" type="password" placeholder="App Password">
       <input id="subject" placeholder="Email Subject">
       <textarea id="message" placeholder="Message Body"></textarea>
-      <textarea id="to" placeholder="Recipients (comma / new line)"></textarea>
+      <textarea id="to" placeholder="Recipients"></textarea>
     </div>
 
     <div class="btn-row">
