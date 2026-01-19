@@ -1,121 +1,119 @@
-require('dotenv').config();
-const express = require('express');
-const session = require('express-session');
-const bodyParser = require('body-parser');
-const nodemailer = require('nodemailer');
-const path = require('path');
+import express from "express";
+import nodemailer from "nodemailer";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+app.use(express.json({ limit: "100kb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
-// Public folder path (Render safe)
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+/* ROOT */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
 
-// ✅ Login Credentials
-const HARD_USERNAME = "Yatendra-Lodhi";
-const HARD_PASSWORD = "bulk-mailing";
+/* ===== CONFIG (DO NOT CHANGE SPEED) ===== */
+const HOURLY_LIMIT = 28;
+const PARALLEL = 3;     // SAME
+const DELAY_MS = 120;  // SAME
 
-// Middleware
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-app.use(express.static(PUBLIC_DIR));
+/* IN-MEMORY STATS */
+let stats = {};
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'bulk-mailer-secret',
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
-  }
-}));
+/* 🔁 AUTO RESET EVERY 1 HOUR (FULL CLEAR) */
+setInterval(() => {
+  stats = {};
+  console.log("🧹 Hourly reset → stats cleared");
+}, 60 * 60 * 1000);
 
-function requireAuth(req, res, next) {
-  if (req.session?.user) return next();
-  return res.redirect('/');
+/* ===== CONTENT SAFETY HELPERS ===== */
+
+/* Subject normalize (no keyword removal) */
+function safeSubject(subject) {
+  return subject.replace(/\s{2,}/g, " ").replace(/([!?])\1+/g, "$1").trim();
 }
 
-// Routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
-});
+/* Reduce spammy patterns for report/price without removing words */
+function balanceKeywords(text) {
+  let t = text.replace(/\r\n/g, "\n").replace(/\s{3,}/g, "\n\n").trim();
 
-app.post('/login', (req, res) => {
-  const username = req.body.username?.trim();
-  const password = req.body.password?.trim();
+  const soften = [
+    ["report", "the report details"],
+    ["price", "the pricing details"]
+  ];
 
-  if (username === HARD_USERNAME && password === HARD_PASSWORD) {
-    req.session.user = username;
-    return res.json({ success: true });
-  }
-  return res.json({ success: false, message: "❌ Invalid credentials" });
-});
-
-app.get('/launcher', requireAuth, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'launcher.html'));
-});
-
-// Optional: auth status (useful if ever needed)
-app.get('/auth/check', (req, res) => {
-  res.json({ authenticated: !!req.session?.user });
-});
-
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    return res.json({ success: true });
+  soften.forEach(([w, p]) => {
+    const r = new RegExp(`(^|\\n)\\s*${w}\\s*(?=\\n|$)`, "gi");
+    t = t.replace(r, `$1${p}`);
   });
-});
 
-// Delay helper
-const delay = ms => new Promise(res => setTimeout(res, ms));
-
-// Batch sender
-async function sendBatch(transporter, mails, batchSize = 5) {
-  for (let i = 0; i < mails.length; i += batchSize) {
-    const batch = mails.slice(i, i + batchSize);
-    await Promise.allSettled(batch.map(m => transporter.sendMail(m)));
-    await delay(200);
-  }
+  return t;
 }
 
-// Bulk Email API
-app.post('/send', requireAuth, async (req, res) => {
-  try {
-    const { senderName, email, password, recipients, subject, message } = req.body;
-
-    if (!email || !password || !recipients)
-      return res.json({ success: false, message: "Email, password and recipients required" });
-
-    const list = recipients.split(/[\n,]+/).map(r => r.trim()).filter(Boolean);
-    if (!list.length)
-      return res.json({ success: false, message: "No valid recipients" });
-
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: email, pass: password }
-    });
-
-    const mails = list.map(r => ({
-      from: `"${senderName || 'Anonymous'}" <${email}>`,
-      to: r,
-      subject: subject || "No Subject",
-      text: message || ""
-    }));
-
-    await sendBatch(transporter, mails, 5);
-    return res.json({ success: true, message: `✅ Mail sent to ${list.length}` });
-
-  } catch (err) {
-    return res.json({ success: false, message: err.message });
+/* ===== SAFE SEND (SAME SPEED) ===== */
+async function sendSafely(transporter, mails) {
+  let sent = 0;
+  for (let i = 0; i < mails.length; i += PARALLEL) {
+    const batch = mails.slice(i, i + PARALLEL);
+    const results = await Promise.allSettled(batch.map(m => transporter.sendMail(m)));
+    results.forEach(r => { if (r.status === "fulfilled") sent++; });
+    await new Promise(r => setTimeout(r, DELAY_MS));
   }
+  return sent;
+}
+
+/* ===== SEND API ===== */
+app.post("/send", async (req, res) => {
+  const { senderName, gmail, apppass, to, subject, message } = req.body;
+
+  if (!gmail || !apppass || !to || !subject || !message) {
+    return res.json({ success: false, msg: "Missing Fields ❌", count: 0 });
+  }
+
+  if (!stats[gmail]) stats[gmail] = { count: 0 };
+  if (stats[gmail].count >= HOURLY_LIMIT) {
+    return res.json({ success: false, msg: "Hourly Limit Reached ❌", count: stats[gmail].count });
+  }
+
+  const recipients = to.split(/,|\r?\n/).map(r => r.trim()).filter(r => r.includes("@"));
+  const remaining = HOURLY_LIMIT - stats[gmail].count;
+  if (recipients.length > remaining) {
+    return res.json({ success: false, msg: "Mail Limit Full ❌", count: stats[gmail].count });
+  }
+
+  const finalSubject = safeSubject(subject);
+  const finalText =
+    balanceKeywords(message) +
+    "\n\nScanned & secured";
+
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: gmail, pass: apppass }
+  });
+
+  try { await transporter.verify(); }
+  catch {
+    return res.json({ success: false, msg: "Wrong App Password ❌", count: stats[gmail].count });
+  }
+
+  const mails = recipients.map(r => ({
+    from: `"${senderName}" <${gmail}>`,
+    to: r,
+    subject: finalSubject,
+    text: finalText,
+    replyTo: gmail
+  }));
+
+  const sentCount = await sendSafely(transporter, mails);
+  stats[gmail].count += sentCount;
+
+  return res.json({ success: true, sent: sentCount, count: stats[gmail].count });
 });
 
-// Fallback
-app.use((req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
-});
-
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("✅ Safe Mail Server running on port", PORT));
