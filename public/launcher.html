@@ -1,37 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Fast Mail Launcher</title>
-<link rel="stylesheet" href="style.css">
+  <title>Secure Mail Console</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="container">
-  <h2>📧 Fast Mail Launcher</h2>
+<div class="page">
+  <div class="card">
+    <h2 class="title">📧 Secure Mail Console</h2>
 
-  <div class="row">
-    <input id="senderName" placeholder="Sender Name">
-    <input id="email" placeholder="Your Gmail">
+    <div class="form-grid">
+      <input id="senderName" placeholder="Sender Name">
+      <input id="gmail" placeholder="Your Gmail">
+      <input id="apppass" type="password" placeholder="App Password">
+      <input id="subject" placeholder="Email Subject">
+      <textarea id="message" placeholder="Message Body"></textarea>
+      <textarea id="to" placeholder="Recipients (comma / new line)"></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button id="sendBtn">Send All</button>
+      <button id="logoutBtn">Logout</button>
+    </div>
+
+    <div id="limitText" class="limit-text">0/28</div>
   </div>
-
-  <div class="row">
-    <input id="pass" type="password" placeholder="App Password">
-    <input id="subject" placeholder="Email Subject">
-  </div>
-
-  <div class="row">
-    <textarea id="message" placeholder="Message Body"></textarea>
-    <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
-  </div>
-
-  <div class="row">
-    <button id="sendBtn">Send All</button>
-    <button id="logoutBtn">Logout</button>
-  </div>
-
-  <p id="statusMessage"></p>
 </div>
-
 <script src="script.js"></script>
 </body>
 </html>
