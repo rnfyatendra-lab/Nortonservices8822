@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   sendBtn.onclick = async () => {
     if (sending) return;
-
     sending = true;
     sendBtn.disabled = true;
     sendBtn.innerText = "Sending…";
@@ -24,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json();
       limitText.innerText = `${data.count || 0} / 28`;
-      alert(data.msg || `Sent: ${data.sent}`);
+      alert(data.msg);
     } catch {
       alert("Network error ❌");
     }
