@@ -91,7 +91,7 @@ async function sendBatch(transporter, mails, batchSize = 5) {
   }
 }
 
-// Subject: minimal cleanup
+// Subject: minimal cleanup (natural look)
 function safeSubject(subject) {
   return (subject || "No Subject")
     .replace(/\r?\n/g, " ")
@@ -99,13 +99,12 @@ function safeSubject(subject) {
     .trim();
 }
 
-// Body: plain text + footer (3-line gap)
+// Body: PLAIN TEXT ONLY (NO FOOTER)
 function safeBody(message) {
-  const clean = (message || "")
+  return (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
-  return `${clean}\n\n\n*Scanned & secured`;
 }
 
 // ================= SEND MAIL =================
@@ -145,7 +144,7 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
-      text: safeBody(message)
+      text: safeBody(message) // ❌ NO FOOTER
     }));
 
     await sendBatch(transporter, mails, 5);
