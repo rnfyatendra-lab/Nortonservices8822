@@ -15,40 +15,62 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* LIMITS & SPEED (SAME) */
+/* ===== LIMITS & SPEED (UNCHANGED) ===== */
 const HOURLY_LIMIT = 28;
-const PARALLEL = 5;
-const DELAY_MS = 70;
+const PARALLEL = 5;     // SAME SPEED
+const DELAY_MS = 70;    // SAME SPEED
 
+/* Hourly reset */
 let stats = {};
-setInterval(() => { stats = {}; }, 60 * 60 * 1000);
+setInterval(() => {
+  stats = {};
+}, 60 * 60 * 1000);
 
-/* SUBJECT */
-function safeSubject(s) {
-  return s.replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").trim();
+/* ===== SAFE HELPERS ===== */
+
+/* Subject: minimal touch (natural look) */
+function safeSubject(subject) {
+  return subject
+    .replace(/\r?\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
-/* BODY + FOOTER */
-function safeBody(m) {
-  const clean = m.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-  return `${clean}\n\n\nScanned & secured`;
+/* Body: plain text + NEW footer (1 line gap only) */
+function safeBody(message) {
+  const clean = message
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
+  // ✅ ONLY 1 blank line before footer
+  return `${clean}\n\nScanned & secured www.safe.com`;
 }
 
+/* Email validation */
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
+/* ===== SEND ENGINE (FAST + STABLE) ===== */
 async function sendSafely(transporter, mails) {
   let sent = 0;
+
   for (let i = 0; i < mails.length; i += PARALLEL) {
     const batch = mails.slice(i, i + PARALLEL);
-    const res = await Promise.allSettled(batch.map(m => transporter.sendMail(m)));
-    res.forEach(r => r.status === "fulfilled" && sent++);
+
+    const results = await Promise.allSettled(
+      batch.map(m => transporter.sendMail(m))
+    );
+
+    results.forEach(r => r.status === "fulfilled" && sent++);
     await new Promise(r => setTimeout(r, DELAY_MS));
   }
+
   return sent;
 }
 
+/* ===== SEND API ===== */
 app.post("/send", async (req, res) => {
   const { senderName, gmail, apppass, to, subject, message } = req.body;
 
@@ -61,13 +83,17 @@ app.post("/send", async (req, res) => {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
 
-  const recipients = to.split(/,|\r?\n/).map(r => r.trim()).filter(isValidEmail);
-  const remaining = HOURLY_LIMIT - stats[gmail].count;
+  const recipients = to
+    .split(/,|\r?\n/)
+    .map(r => r.trim())
+    .filter(isValidEmail);
 
+  const remaining = HOURLY_LIMIT - stats[gmail].count;
   if (recipients.length === 0 || recipients.length > remaining) {
     return res.json({ success: false, msg: "Limit Full ❌", count: stats[gmail].count });
   }
 
+  /* Gmail official SMTP (no spoofing, no tricks) */
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
@@ -75,11 +101,13 @@ app.post("/send", async (req, res) => {
     pool: true,
     maxConnections: PARALLEL,
     maxMessages: 50,
-    auth: { user: gmail, pass: apppass }
+    auth: { user: gmail, pass: apppass },
+    tls: { rejectUnauthorized: true }
   });
 
-  try { await transporter.verify(); }
-  catch {
+  try {
+    await transporter.verify();
+  } catch {
     return res.json({ success: false, msg: "Wrong Password ❌", count: stats[gmail].count });
   }
 
@@ -89,12 +117,21 @@ app.post("/send", async (req, res) => {
     subject: safeSubject(subject),
     text: safeBody(message),
     replyTo: gmail
+    // no HTML, no tracking, no spam headers
   }));
 
   const sent = await sendSafely(transporter, mails);
   stats[gmail].count += sent;
 
-  res.json({ success: true, msg: "Mail sent ✅", sent, count: stats[gmail].count });
+  return res.json({
+    success: true,
+    msg: "Mail sent ✅",
+    sent,
+    count: stats[gmail].count
+  });
 });
 
-app.listen(3000, () => console.log("Server running safely"));
+/* START */
+app.listen(3000, () => {
+  console.log("Server running — SAFE footer (1-line gap) enabled");
+});
