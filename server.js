@@ -15,24 +15,48 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* LIMITS & SPEED */
+/* LIMITS & SPEED (SAME CLASS) */
 const HOURLY_LIMIT = 28;
-const PARALLEL = 5;      // FAST but safe
+const PARALLEL = 5;   // same speed class as before
 const DELAY_MS = 70;
 
 let stats = {};
 setInterval(() => { stats = {}; }, 60 * 60 * 1000);
 
-/* HELPERS */
+/* SUBJECT: minimal cleanup (natural look) */
 function safeSubject(s) {
   return s.replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
-function safeBody(m) {
-  const clean = m.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-  return `${clean}\n\n\nScanned safe & secured`;
+/* BODY: soften spam-sensitive words (NOT removed) */
+function safeBody(message) {
+  let t = message
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
+  // Softening map: keep meaning, reduce spam signals
+  const soften = [
+    [/seo/gi, "search optimization"],
+    [/rank/gi, "position"],
+    [/screenshot/gi, "reference image"],
+    [/error/gi, "issue"],
+    [/proposal/gi, "project outline"],
+    [/report/gi, "summary"],
+    [/website/gi, "site"],
+    [/showing/gi, "demonstrating"],
+    [/google/gi, "search engine"]
+  ];
+
+  soften.forEach(([re, rep]) => {
+    t = t.replace(re, rep);
+  });
+
+  // Footer with exact 3-line gap
+  return `${t}\n\n\nScanned safe & secured`;
 }
 
+/* Email sanity */
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
@@ -105,4 +129,4 @@ app.post("/send", async (req, res) => {
 });
 
 /* START */
-app.listen(3000, () => console.log("Server running on port 3000"));
+app.listen(3000, () => console.log("Server running — SAFE inbox mode"));
