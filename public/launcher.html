@@ -5,33 +5,23 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<script>
-const ONE_HOUR = 60 * 60 * 1000;
-const t = localStorage.getItem("loginTime");
-if (!t || Date.now() - t > ONE_HOUR) location.replace("/login.html");
-</script>
-
 <div class="page">
   <div class="card">
-    <!-- ✅ UPDATED SAFE NAME -->
     <h2 class="title">📨 Mail Dispatch Panel</h2>
 
     <div class="form-grid">
       <input id="senderName" placeholder="Sender Name">
-      <input id="gmail" placeholder="Your Gmail">
-      <input id="apppass" type="password" placeholder="App Password">
-      <input id="subject" placeholder="Email Subject">
-      <textarea id="message" placeholder="Message Body"></textarea>
-      <textarea id="to" placeholder="Recipients"></textarea>
+      <input id="email" placeholder="Gmail">
+      <input id="password" type="password" placeholder="App Password">
+      <input id="subject" placeholder="Subject">
+      <textarea id="message" placeholder="Message"></textarea>
+      <textarea id="recipients" placeholder="Recipients"></textarea>
     </div>
 
     <div class="btn-row">
-      <button id="sendBtn">Send All</button>
-      <button id="logoutBtn">Logout</button>
+      <button id="sendBtn">Send</button>
+      <button ondblclick="logout()">Logout</button>
     </div>
-
-    <div id="limitText" class="limit-text">0 / 28</div>
   </div>
 </div>
 
