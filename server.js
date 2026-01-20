@@ -41,8 +41,7 @@ function safeBody(message) {
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
 
-  // ✅ NEW FOOTER
-  return `${clean}\n\n\n*Scanned & secured`;
+  return `${clean}\n\n\nScanned & secured`;
 }
 
 /* Light email validation */
