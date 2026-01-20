@@ -9,19 +9,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Hardcoded login
-const HARD_USERNAME = "!@#$%^&*())(*&^%$#@!@#$%^&*";
-const HARD_PASSWORD = "!@#$%^&*())(*&^%$#@!@#$%^&*";
+// 🔑 FIXED LOGIN (ID & PASSWORD SAME)
+const HARD_USERNAME = "mailinbox@#";
+const HARD_PASSWORD = "mailinbox@#";
 
 // ================= GLOBAL STATE =================
-
-// Per-sender hourly mail limit
-let mailLimits = {};
-
-// Global launcher lock
-let launcherLocked = false;
-
-// Session store
+let mailLimits = {};          // per-sender hourly limit
+let launcherLocked = false;  // global lock
 const sessionStore = new session.MemoryStore();
 
 // ================= MIDDLEWARE =================
@@ -29,37 +23,24 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session (1 hour life)
+// Session (1 hour)
 app.use(session({
   secret: 'bulk-mailer-secret',
   resave: false,
   saveUninitialized: true,
   store: sessionStore,
-  cookie: {
-    maxAge: 60 * 60 * 1000 // 1 hour
-  }
+  cookie: { maxAge: 60 * 60 * 1000 }
 }));
 
 // ================= FULL RESET =================
-
 function fullServerReset() {
-  console.log("🔁 FULL LAUNCHER RESET");
-
   launcherLocked = true;
   mailLimits = {};
-
-  sessionStore.clear(() => {
-    console.log("🧹 All sessions cleared");
-  });
-
-  setTimeout(() => {
-    launcherLocked = false;
-    console.log("✅ Launcher unlocked for fresh login");
-  }, 2000);
+  sessionStore.clear(() => {});
+  setTimeout(() => { launcherLocked = false; }, 2000);
 }
 
 // ================= AUTH =================
-
 function requireAuth(req, res, next) {
   if (launcherLocked) return res.redirect('/');
   if (req.session.user) return next();
@@ -67,57 +48,40 @@ function requireAuth(req, res, next) {
 }
 
 // ================= ROUTES =================
-
-// Login page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Login
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   if (launcherLocked) {
-    return res.json({
-      success: false,
-      message: "⛔ Launcher reset ho raha hai, thodi der baad login karo"
-    });
+    return res.json({ success: false, message: "⛔ Launcher reset ho raha hai" });
   }
 
   if (username === HARD_USERNAME && password === HARD_PASSWORD) {
     req.session.user = username;
-
-    // ⏱️ Full reset after 1 hour
     setTimeout(fullServerReset, 60 * 60 * 1000);
-
     return res.json({ success: true });
   }
-
   return res.json({ success: false, message: "❌ Invalid credentials" });
 });
 
-// Launcher page
 app.get('/launcher', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
 });
 
-// ================= LOGOUT =================
 app.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('connect.sid');
-    return res.json({
-      success: true,
-      message: "✅ Logged out successfully"
-    });
+    res.json({ success: true });
   });
 });
 
 // ================= HELPERS =================
+const delay = ms => new Promise(r => setTimeout(r, ms));
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
+// SAME SPEED: batchSize = 5, delay = 300ms
 async function sendBatch(transporter, mails, batchSize = 5) {
   for (let i = 0; i < mails.length; i += batchSize) {
     await Promise.allSettled(
@@ -127,32 +91,43 @@ async function sendBatch(transporter, mails, batchSize = 5) {
   }
 }
 
-// ================= SEND MAIL =================
+// Subject: minimal cleanup
+function safeSubject(subject) {
+  return (subject || "No Subject")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
+// Body: plain text + footer (3-line gap)
+function safeBody(message) {
+  const clean = (message || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+  return `${clean}\n\n\n*Scanned & secured`;
+}
+
+// ================= SEND MAIL =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
 
     if (!email || !password || !recipients) {
-      return res.json({
-        success: false,
-        message: "Email, password and recipients required"
-      });
+      return res.json({ success: false, message: "Required fields missing" });
     }
 
     const now = Date.now();
-
-    // ⏱️ Hourly sender reset
     if (!mailLimits[email] || now - mailLimits[email].startTime > 60 * 60 * 1000) {
       mailLimits[email] = { count: 0, startTime: now };
     }
 
-    const recipientList = recipients
+    const list = recipients
       .split(/[\n,]+/)
       .map(r => r.trim())
       .filter(Boolean);
 
-    if (mailLimits[email].count + recipientList.length > 27) {
+    if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
         message: `❌ Max 27 mails/hour | Remaining: ${27 - mailLimits[email].count}`
@@ -166,28 +141,22 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    const mails = recipientList.map(r => ({
+    const mails = list.map(r => ({
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
-
-      // subject remains same
-      subject: subject ? `Re: ${subject}` : "Re: No Subject",
-
-      // ❌ footer REMOVED
-      text: (message || "")
+      subject: safeSubject(subject),
+      text: safeBody(message)
     }));
 
     await sendBatch(transporter, mails, 5);
+    mailLimits[email].count += list.length;
 
-    mailLimits[email].count += recipientList.length;
-
-    return res.json({
+    res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/27`
+      message: `✅ Sent ${list.length} | Used ${mailLimits[email].count}/27`
     });
-
   } catch (err) {
-    return res.json({ success: false, message: err.message });
+    res.json({ success: false, message: err.message });
   }
 });
 
