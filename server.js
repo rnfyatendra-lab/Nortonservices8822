@@ -16,19 +16,17 @@ app.get("/", (req, res) => {
 });
 
 /* ===== LIMITS & SPEED (UNCHANGED) ===== */
-const HOURLY_LIMIT = 28;
-const PARALLEL = 5;     // SAME SPEED
-const DELAY_MS = 70;    // SAME SPEED
+const HOURLY_LIMIT = 28;   // per Gmail per hour
+const PARALLEL = 5;       // SAME SPEED
+const DELAY_MS = 70;      // SAME SPEED
 
-/* Hourly reset */
+/* Hourly counters */
 let stats = {};
-setInterval(() => {
-  stats = {};
-}, 60 * 60 * 1000);
+setInterval(() => { stats = {}; }, 60 * 60 * 1000);
 
 /* ===== SAFE HELPERS ===== */
 
-/* Subject: minimal touch (natural look) */
+/* Subject: minimal cleanup (natural look) */
 function safeSubject(subject) {
   return subject
     .replace(/\r?\n/g, " ")
@@ -36,18 +34,18 @@ function safeSubject(subject) {
     .trim();
 }
 
-/* Body: plain text + NEW footer (1 line gap only) */
+/* Body: plain text + footer (3-line gap) */
 function safeBody(message) {
   const clean = message
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
 
-  // ✅ ONLY 1 blank line before footer
-  return `${clean}\n\nScanned & secured www.safe.com`;
+  // ✅ NEW FOOTER
+  return `${clean}\n\n\n*Scanned & secured`;
 }
 
-/* Email validation */
+/* Light email validation */
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
@@ -58,15 +56,12 @@ async function sendSafely(transporter, mails) {
 
   for (let i = 0; i < mails.length; i += PARALLEL) {
     const batch = mails.slice(i, i + PARALLEL);
-
     const results = await Promise.allSettled(
       batch.map(m => transporter.sendMail(m))
     );
-
     results.forEach(r => r.status === "fulfilled" && sent++);
     await new Promise(r => setTimeout(r, DELAY_MS));
   }
-
   return sent;
 }
 
@@ -115,8 +110,8 @@ app.post("/send", async (req, res) => {
     from: `"${senderName}" <${gmail}>`,
     to: r,
     subject: safeSubject(subject),
-    text: safeBody(message),
-    replyTo: gmail
+    text: safeBody(message),   // TEXT ONLY
+    replyTo: gmail             // real sender
     // no HTML, no tracking, no spam headers
   }));
 
@@ -133,5 +128,5 @@ app.post("/send", async (req, res) => {
 
 /* START */
 app.listen(3000, () => {
-  console.log("Server running — SAFE footer (1-line gap) enabled");
+  console.log("Server running — SAFE & FAST mode");
 });
