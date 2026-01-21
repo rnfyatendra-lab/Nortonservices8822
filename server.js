@@ -59,17 +59,17 @@ app.post('/logout', (req, res) => {
 // ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ⚡ SPEED SAME: batch 5 + 300ms
+// ⚡ SPEED SAME (avg): batch 5 + ~300ms
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
     await Promise.allSettled(
       mails.slice(i, i + 5).map(m => transporter.sendMail(m))
     );
-    await delay(300);
+    await delay(300); // keep same
   }
 }
 
-// Subject: simple, human-like (no hype)
+// Subject: short, human, no hype
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -78,16 +78,54 @@ function safeSubject(subject) {
     .trim();
 }
 
-// Body: plain-text ONLY (NO footer, NO warm-up text)
+/**
+ * Body sanitizer:
+ * - Plain text only
+ * - Keeps meaning
+ * - Softens common spam-prone words contextually
+ */
 function safeBody(message) {
-  return (message || "")
+  let t = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // remove odd chars
     .trim();
+
+  // ===== CONTEXTUAL SOFTENING (meaning preserved) =====
+  const softenMap = [
+    // Screenshot
+    [/^\s*screenshot\s*$/gim, "a reference image is shared"],
+    [/\bscreenshot\b/gi, "the reference image"],
+
+    // SEO / Rank
+    [/\bseo\b/gi, "search visibility"],
+    [/\brank\b/gi, "current positioning"],
+
+    // Report / Proposal
+    [/\breport\b/gi, "the summary details"],
+    [/\bproposal\b/gi, "the suggested approach"],
+
+    // Error / Issue
+    [/\berror\b/gi, "an issue noticed"],
+    [/\bissue\b/gi, "a point to review"],
+
+    // Website / Google
+    [/\bwebsite\b/gi, "the site"],
+    [/\bgoogle\b/gi, "the search platform"],
+
+    // Salesy terms toned down
+    [/\bfree\b/gi, "at no additional cost"],
+    [/\burgent\b/gi, "time-sensitive"],
+    [/\bguarantee\b/gi, "aim to"]
+  ];
+
+  softenMap.forEach(([re, rep]) => {
+    t = t.replace(re, rep);
+  });
+
+  return t;
 }
 
-// Basic email sanity
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
@@ -119,7 +157,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // Official Gmail SMTP (legit)
+    // Official Gmail SMTP (legit, no spoofing)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -150,5 +188,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (warm-up removed, inbox-friendly)")
+  console.log("🚀 Mail server running (max inbox-friendly, legit)")
 );
