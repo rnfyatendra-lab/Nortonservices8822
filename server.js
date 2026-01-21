@@ -20,7 +20,6 @@ const sessionStore = new session.MemoryStore();
 // ================= MIDDLEWARE =================
 app.use(bodyParser.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(session({
   secret: 'mailer-secret',
   resave: false,
@@ -46,7 +45,7 @@ app.post('/login', (req, res) => {
     req.session.user = username;
     return res.json({ success: true });
   }
-  res.json({ success: false, message: "Invalid login" });
+  return res.json({ success: false, message: "Invalid login" });
 });
 
 app.get('/launcher', requireAuth, (req, res) =>
@@ -70,21 +69,21 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ✅ SUBJECT: human-like, non-spammy
+// Subject: simple, human-like (no hype)
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
     .replace(/\s{2,}/g, " ")
-    .replace(/[!$%*]{2,}/g, "")   // remove hype bursts
+    .replace(/[!$%*]{2,}/g, "")
     .trim();
 }
 
-// ✅ BODY: plain-text ONLY (NO footer)
+// Body: plain-text ONLY (NO footer, NO warm-up text)
 function safeBody(message) {
   return (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // remove odd chars
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 }
 
@@ -97,12 +96,11 @@ function isValidEmail(e) {
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
-
     if (!email || !password || !recipients) {
       return res.json({ success: false, message: "Missing fields" });
     }
 
-    // ⏱ Hourly reset per Gmail
+    // ⏱ Hourly reset (NO warm-up)
     const now = Date.now();
     if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
@@ -121,7 +119,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // ✅ OFFICIAL GMAIL SMTP (NO spoofing)
+    // Official Gmail SMTP (legit)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -152,5 +150,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (max inbox-friendly mode)")
+  console.log("🚀 Mail server running (warm-up removed, inbox-friendly)")
 );
