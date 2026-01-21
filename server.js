@@ -70,7 +70,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// Subject: human-like, safe
+// Subject: simple, human-like (no hype)
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -79,16 +79,15 @@ function safeSubject(subject) {
     .trim();
 }
 
-// Body: clean plain text ONLY
+// Body: plain text only (NO footer, NO links forced)
 function safeBody(message) {
   return (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // non-ASCII remove
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // non-ASCII strip
     .trim();
 }
 
-// Email sanity
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
@@ -116,13 +115,10 @@ app.post('/send', requireAuth, async (req, res) => {
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
-        message: "Limit Full ❌",
-        used: mailLimits[email].count,
-        limit: 27
+        message: `Limit Full ❌ | Used ${mailLimits[email].count} / 27`
       });
     }
 
-    // Gmail official SMTP (legit)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -134,26 +130,3 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
-      text: safeBody(message),
-      replyTo: email // trust signal
-    }));
-
-    await sendBatch(transporter, mails);
-    mailLimits[email].count += list.length;
-
-    res.json({
-      success: true,
-      message: "Mail sent ✅",
-      used: mailLimits[email].count,
-      limit: 27
-    });
-
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
-
-// ================= START =================
-app.listen(PORT, () =>
-  console.log("🚀 Mail system running safely on", PORT)
-);
