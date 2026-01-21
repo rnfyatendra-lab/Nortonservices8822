@@ -60,7 +60,7 @@ app.post('/logout', (req, res) => {
 // ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// SAME SPEED: batch 5 + 300ms
+// SAME SPEED: batch 5 + 300ms (unchanged)
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
     await Promise.allSettled(
@@ -75,19 +75,20 @@ function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
     .replace(/\s{2,}/g, " ")
-    .replace(/[!$%*]{2,}/g, "")
+    .replace(/[!$%*]{2,}/g, "") // remove spammy bursts
     .trim();
 }
 
-// Body: plain text only (NO footer, NO links forced)
+// Body: plain text only (no footer, no links forced)
 function safeBody(message) {
   return (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // non-ASCII strip
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip non-ASCII junk
     .trim();
 }
 
+// Email sanity
 function isValidEmail(e) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
@@ -119,6 +120,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
+    // Gmail official SMTP (legit, no spoofing)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -131,13 +133,13 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email
+      replyTo: email // trust signal
     }));
 
     await sendBatch(transporter, mails);
     mailLimits[email].count += list.length;
 
-    // ✅ COUNT ONLY IN POPUP MESSAGE
+    // COUNT ONLY IN POPUP MESSAGE
     return res.json({
       success: true,
       message: `Mail sent ✅\nUsed ${mailLimits[email].count} / 27`
