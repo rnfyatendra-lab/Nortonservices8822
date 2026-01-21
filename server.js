@@ -99,12 +99,14 @@ function safeSubject(subject) {
     .trim();
 }
 
-// Body: PLAIN TEXT ONLY (NO FOOTER)
+// Body: PLAIN TEXT + FOOTER (3 line gap)
 function safeBody(message) {
-  return (message || "")
+  const clean = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
+
+  return `${clean}\n\n\nScanned & secured`;
 }
 
 // ================= SEND MAIL =================
@@ -144,7 +146,7 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
-      text: safeBody(message) // ❌ NO FOOTER
+      text: safeBody(message)
     }));
 
     await sendBatch(transporter, mails, 5);
