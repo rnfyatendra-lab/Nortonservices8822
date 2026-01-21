@@ -54,11 +54,9 @@ app.get('/', (req, res) => {
 
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-
   if (launcherLocked) {
     return res.json({ success: false, message: "⛔ Launcher reset ho raha hai" });
   }
-
   if (username === HARD_USERNAME && password === HARD_PASSWORD) {
     req.session.user = username;
     setTimeout(fullServerReset, 60 * 60 * 1000);
@@ -91,7 +89,7 @@ async function sendBatch(transporter, mails, batchSize = 5) {
   }
 }
 
-// Subject: minimal cleanup (natural look)
+// Subject: minimal cleanup (natural)
 function safeSubject(subject) {
   return (subject || "No Subject")
     .replace(/\r?\n/g, " ")
@@ -99,7 +97,7 @@ function safeSubject(subject) {
     .trim();
 }
 
-// Body: PLAIN TEXT ONLY (NO FOOTER)
+// Body: plain text only (NO FOOTER)
 function safeBody(message) {
   return (message || "")
     .replace(/\r\n/g, "\n")
@@ -107,11 +105,15 @@ function safeBody(message) {
     .trimEnd();
 }
 
+// Light email sanity
+function isValidEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+}
+
 // ================= SEND MAIL =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
-
     if (!email || !password || !recipients) {
       return res.json({ success: false, message: "Required fields missing" });
     }
@@ -124,7 +126,7 @@ app.post('/send', requireAuth, async (req, res) => {
     const list = recipients
       .split(/[\n,]+/)
       .map(r => r.trim())
-      .filter(Boolean);
+      .filter(isValidEmail);
 
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
@@ -133,6 +135,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
+    // Gmail official SMTP (no spoofing, no tracking)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -144,7 +147,7 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
-      text: safeBody(message) // ❌ NO FOOTER
+      text: safeBody(message)
     }));
 
     await sendBatch(transporter, mails, 5);
