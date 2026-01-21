@@ -130,3 +130,25 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
+      text: safeBody(message),
+      replyTo: email
+    }));
+
+    await sendBatch(transporter, mails);
+    mailLimits[email].count += list.length;
+
+    // ✅ COUNT ONLY IN POPUP MESSAGE
+    return res.json({
+      success: true,
+      message: `Mail sent ✅\nUsed ${mailLimits[email].count} / 27`
+    });
+
+  } catch (e) {
+    return res.json({ success: false, message: e.message });
+  }
+});
+
+// ================= START =================
+app.listen(PORT, () =>
+  console.log("🚀 Mail system running safely on", PORT)
+);
