@@ -6,9 +6,9 @@ sendBtn.onclick = async () => {
 
   try {
     const res = await fetch('/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
         senderName: senderName.value,
         email: email.value,
         password: password.value,
@@ -17,13 +17,9 @@ sendBtn.onclick = async () => {
         recipients: recipients.value
       })
     });
-
     const data = await res.json();
-
-    // ✅ COUNT ONLY IN POPUP
     alert(data.message);
-
-  } catch (e) {
+  } catch {
     alert("Network error");
   }
 
@@ -32,6 +28,5 @@ sendBtn.onclick = async () => {
 };
 
 function logout(){
-  fetch('/logout', { method:'POST' })
-    .then(() => location.href = '/');
+  fetch('/logout',{method:'POST'}).then(()=>location.href='/');
 }
