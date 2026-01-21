@@ -1,3 +1,4 @@
+// server.js
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
@@ -13,11 +14,11 @@ const HARD_USERNAME = "mailinbox@#";
 const HARD_PASSWORD = "mailinbox@#";
 
 // ================= STATE =================
-let mailLimits = {};
+let mailLimits = {}; // { gmail: { count, start } }
 const sessionStore = new session.MemoryStore();
 
 // ================= MIDDLEWARE =================
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
@@ -59,22 +60,49 @@ app.post('/logout', (req, res) => {
 // ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
+// SAME SPEED: batch 5 + 300ms
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
     await Promise.allSettled(
       mails.slice(i, i + 5).map(m => transporter.sendMail(m))
     );
-    await delay(300); // SAME SPEED
+    await delay(300);
   }
+}
+
+// Subject: human-like, safe
+function safeSubject(subject) {
+  return (subject || "Hello")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[!$%*]{2,}/g, "")
+    .trim();
+}
+
+// Body: clean plain text ONLY
+function safeBody(message) {
+  return (message || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // non-ASCII remove
+    .trim();
+}
+
+// Email sanity
+function isValidEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
 // ================= SEND =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
-    if (!email || !password || !recipients)
-      return res.json({ success: false, message: "Missing fields" });
 
+    if (!email || !password || !recipients) {
+      return res.json({ success: false, message: "Missing fields" });
+    }
+
+    // Hourly reset per Gmail
     const now = Date.now();
     if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
@@ -83,7 +111,7 @@ app.post('/send', requireAuth, async (req, res) => {
     const list = recipients
       .split(/[\n,]+/)
       .map(r => r.trim())
-      .filter(Boolean);
+      .filter(isValidEmail);
 
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
@@ -94,6 +122,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
+    // Gmail official SMTP (legit)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -104,8 +133,9 @@ app.post('/send', requireAuth, async (req, res) => {
     const mails = list.map(r => ({
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
-      subject: subject || "No Subject",
-      text: (message || "").replace(/\r\n/g, "\n")
+      subject: safeSubject(subject),
+      text: safeBody(message),
+      replyTo: email // trust signal
     }));
 
     await sendBatch(transporter, mails);
@@ -117,11 +147,13 @@ app.post('/send', requireAuth, async (req, res) => {
       used: mailLimits[email].count,
       limit: 27
     });
+
   } catch (e) {
     res.json({ success: false, message: e.message });
   }
 });
 
+// ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail system running on", PORT)
+  console.log("🚀 Mail system running safely on", PORT)
 );
