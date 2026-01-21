@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
@@ -9,7 +8,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 🔑 LOGIN (same)
+// 🔐 LOGIN (ID & PASSWORD SAME)
 const HARD_USERNAME = "mailinbox@#";
 const HARD_PASSWORD = "mailinbox@#";
 
@@ -26,13 +25,13 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   store: sessionStore,
-  cookie: { maxAge: 60 * 60 * 1000 }
+  cookie: { maxAge: 60 * 60 * 1000 } // 1 hour
 }));
 
 // ================= AUTH =================
 function requireAuth(req, res, next) {
   if (req.session.user) return next();
-  res.redirect('/');
+  return res.redirect('/');
 }
 
 // ================= ROUTES =================
@@ -62,7 +61,9 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
-    await Promise.allSettled(mails.slice(i, i + 5).map(m => transporter.sendMail(m)));
+    await Promise.allSettled(
+      mails.slice(i, i + 5).map(m => transporter.sendMail(m))
+    );
     await delay(300); // SAME SPEED
   }
 }
@@ -75,10 +76,14 @@ app.post('/send', requireAuth, async (req, res) => {
       return res.json({ success: false, message: "Missing fields" });
 
     const now = Date.now();
-    if (!mailLimits[email] || now - mailLimits[email].start > 3600000)
+    if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
+    }
 
-    const list = recipients.split(/[\n,]+/).map(r => r.trim()).filter(Boolean);
+    const list = recipients
+      .split(/[\n,]+/)
+      .map(r => r.trim())
+      .filter(Boolean);
 
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
@@ -100,7 +105,7 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
       subject: subject || "No Subject",
-      text: message || ""
+      text: (message || "").replace(/\r\n/g, "\n")
     }));
 
     await sendBatch(transporter, mails);
@@ -112,7 +117,6 @@ app.post('/send', requireAuth, async (req, res) => {
       used: mailLimits[email].count,
       limit: 27
     });
-
   } catch (e) {
     res.json({ success: false, message: e.message });
   }
