@@ -69,7 +69,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (NO WORD CHANGE) =====
+// ===== SUBJECT (USER WORDS KEPT) =====
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -77,7 +77,9 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (CONTEXT-AWARE SAFE WORDS) =====
+// ===== BODY (CONTEXT-AWARE, MINIMAL CHANGES) =====
+// Only replaces truly spam-prone words, only when present.
+// Related, neutral wording; meaning preserved.
 function safeBody(message) {
   let text = (message || "")
     .replace(/\r\n/g, "\n")
@@ -85,44 +87,31 @@ function safeBody(message) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  /**
-   * ONLY HIGH-RISK WORDS
-   * Replaced ONLY when they appear:
-   *  - at line start
-   *  - standalone
-   *  - or in pushy phrases
-   */
   const RULES = [
-    { re: /^\s*free\b/gi, to: "available at no additional cost" },
+    // greetings (normalize only)
+    { re: /^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, to: "Hello" },
+
+    // promotional pressure
     { re: /\bfree\b/gi, to: "no additional cost" },
-
-    { re: /^\s*urgent\b/gi, to: "time-sensitive" },
     { re: /\burgent\b/gi, to: "time-sensitive" },
-
-    { re: /^\s*offer\b/gi, to: "an option" },
-    { re: /\boffer\b/gi, to: "an option" },
-
-    { re: /\bdiscount\b/gi, to: "adjusted pricing" },
-    { re: /\bdeal\b/gi, to: "arrangement" },
-
     { re: /\bguarantee\b/gi, to: "aim to" },
 
-    // Visuals (safe neutral)
+    // pricing/sales
+    { re: /\bdiscount\b/gi, to: "adjusted pricing" },
+    { re: /\boffer\b/gi, to: "an option" },
+    { re: /\bdeal\b/gi, to: "arrangement" },
+
+    // visuals
     { re: /\bimage\b/gi, to: "reference image" },
     { re: /\bscreenshot\b/gi, to: "reference image" },
 
-    // Tech issues
+    // issues
     { re: /\berror\b/gi, to: "an issue noticed" },
-    { re: /\bproblem\b/gi, to: "a concern identified" },
-
-    // Greetings (normalize only)
-    { re: /^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, to: "Hello" }
+    { re: /\bproblem\b/gi, to: "a concern identified" }
   ];
 
   RULES.forEach(r => {
-    if (r.re.test(text)) {
-      text = text.replace(r.re, r.to);
-    }
+    if (r.re.test(text)) text = text.replace(r.re, r.to);
   });
 
   return text;
@@ -151,6 +140,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
+    // Safe zone 20–25 (hard stop 27)
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -158,6 +148,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
+    // Official Gmail SMTP
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -165,7 +156,7 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Verify App Password
+    // Verify app password first
     try {
       await transporter.verify();
     } catch {
@@ -195,5 +186,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (max inbox-safe mode)")
+  console.log("🚀 Mail server running (ultra-safe, inbox-friendly)")
 );
