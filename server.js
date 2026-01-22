@@ -69,7 +69,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (USER WORDS KEPT) =====
+// ===== SUBJECT (USER WORDS KEPT, MIN CLEANUP) =====
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -77,40 +77,34 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (CONTEXT-AWARE, MINIMAL CHANGES) =====
-// Only replaces truly spam-prone words, only when present.
-// Related, neutral wording; meaning preserved.
+// ===== BODY (ULTRA-MINIMAL, CONTEXT-AWARE) =====
+// Only change truly spam-prone words, only if present.
+// No aggressive rewriting.
 function safeBody(message) {
   let text = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip odd chars
     .trim();
 
-  const RULES = [
-    // greetings (normalize only)
-    { re: /^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, to: "Hello" },
+  // Normalize greetings (very light)
+  text = text.replace(/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello");
 
-    // promotional pressure
+  // Context-aware replacements (ONLY if word exists)
+  const MAP = [
     { re: /\bfree\b/gi, to: "no additional cost" },
     { re: /\burgent\b/gi, to: "time-sensitive" },
     { re: /\bguarantee\b/gi, to: "aim to" },
-
-    // pricing/sales
     { re: /\bdiscount\b/gi, to: "adjusted pricing" },
     { re: /\boffer\b/gi, to: "an option" },
     { re: /\bdeal\b/gi, to: "arrangement" },
-
-    // visuals
     { re: /\bimage\b/gi, to: "reference image" },
     { re: /\bscreenshot\b/gi, to: "reference image" },
-
-    // issues
     { re: /\berror\b/gi, to: "an issue noticed" },
     { re: /\bproblem\b/gi, to: "a concern identified" }
   ];
 
-  RULES.forEach(r => {
+  MAP.forEach(r => {
     if (r.re.test(text)) text = text.replace(r.re, r.to);
   });
 
@@ -168,7 +162,7 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email
+      replyTo: email // trust signal
     }));
 
     await sendBatch(transporter, mails);
@@ -186,5 +180,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (ultra-safe, inbox-friendly)")
+  console.log("🚀 Mail server running (ultra-clean, inbox-friendly)")
 );
