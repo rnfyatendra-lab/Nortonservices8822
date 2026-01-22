@@ -69,8 +69,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (NO AUTO CHANGE, NO SALESY CLEANUPS) =====
-// Only trims whitespace/newlines; user’s words stay intact.
+// ===== SUBJECT (NO CHANGE) =====
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -78,32 +77,37 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (PLAIN TEXT ONLY, MINIMAL & NEUTRAL) =====
-// Remove risky transforms; keep message human and simple.
-// Only normalize greetings and obvious visual terms.
+// ===== BODY (SMART & SELECTIVE REPLACE) =====
 function safeBody(message) {
-  let t = (message || "")
+  let text = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip odd chars
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  // Minimal normalization (meaning preserved)
-  const minimalMap = [
-    // greetings → neutral
-    [/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello"],
-    [/\b(hey|hi|hello|helllo)\b/gi, "hello"],
+  // ⚠️ ONLY HIGH-RISK WORDS (selective)
+  const SPAM_SAFE_MAP = {
+    "free": "at no additional cost",
+    "offer": "an option",
+    "discount": "adjusted pricing",
+    "deal": "arrangement",
+    "urgent": "time-sensitive",
+    "guarantee": "aim to",
+    "image": "reference image",
+    "screenshot": "reference image",
+    "error": "an issue noticed",
+    "problem": "a concern identified"
+  };
 
-    // visuals → neutral wording
-    [/\bimage\b/gi, "reference image"],
-    [/\bscreenshot\b/gi, "reference image"]
-  ];
-
-  minimalMap.forEach(([re, rep]) => {
-    t = t.replace(re, rep);
+  // Replace ONLY if word exists
+  Object.keys(SPAM_SAFE_MAP).forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+    if (regex.test(text)) {
+      text = text.replace(regex, SPAM_SAFE_MAP[word]);
+    }
   });
 
-  return t;
+  return text;
 }
 
 function isValidEmail(e) {
@@ -118,7 +122,7 @@ app.post('/send', requireAuth, async (req, res) => {
       return res.json({ success: false, message: "Missing fields" });
     }
 
-    // ⏱ Hourly reset (NO warm-up)
+    // ⏱ Hourly reset
     const now = Date.now();
     if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
@@ -129,7 +133,6 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
-    // Safe zone 20–25 (hard stop 27)
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -137,7 +140,6 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // Official Gmail SMTP (no spoofing)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -145,7 +147,7 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Verify app password first (prevent partial sends)
+    // Verify App Password
     try {
       await transporter.verify();
     } catch {
@@ -157,7 +159,7 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email // trust signal
+      replyTo: email
     }));
 
     await sendBatch(transporter, mails);
@@ -175,5 +177,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (ultra-safe, inbox-friendly)")
+  console.log("🚀 Mail server running (selective spam-safe mode)")
 );
