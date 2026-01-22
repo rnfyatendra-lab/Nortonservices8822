@@ -69,7 +69,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (NO CHANGE) =====
+// ===== SUBJECT (NO WORD CHANGE) =====
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -77,7 +77,7 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (SMART & SELECTIVE REPLACE) =====
+// ===== BODY (CONTEXT-AWARE SAFE WORDS) =====
 function safeBody(message) {
   let text = (message || "")
     .replace(/\r\n/g, "\n")
@@ -85,25 +85,43 @@ function safeBody(message) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  // ⚠️ ONLY HIGH-RISK WORDS (selective)
-  const SPAM_SAFE_MAP = {
-    "free": "at no additional cost",
-    "offer": "an option",
-    "discount": "adjusted pricing",
-    "deal": "arrangement",
-    "urgent": "time-sensitive",
-    "guarantee": "aim to",
-    "image": "reference image",
-    "screenshot": "reference image",
-    "error": "an issue noticed",
-    "problem": "a concern identified"
-  };
+  /**
+   * ONLY HIGH-RISK WORDS
+   * Replaced ONLY when they appear:
+   *  - at line start
+   *  - standalone
+   *  - or in pushy phrases
+   */
+  const RULES = [
+    { re: /^\s*free\b/gi, to: "available at no additional cost" },
+    { re: /\bfree\b/gi, to: "no additional cost" },
 
-  // Replace ONLY if word exists
-  Object.keys(SPAM_SAFE_MAP).forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, "gi");
-    if (regex.test(text)) {
-      text = text.replace(regex, SPAM_SAFE_MAP[word]);
+    { re: /^\s*urgent\b/gi, to: "time-sensitive" },
+    { re: /\burgent\b/gi, to: "time-sensitive" },
+
+    { re: /^\s*offer\b/gi, to: "an option" },
+    { re: /\boffer\b/gi, to: "an option" },
+
+    { re: /\bdiscount\b/gi, to: "adjusted pricing" },
+    { re: /\bdeal\b/gi, to: "arrangement" },
+
+    { re: /\bguarantee\b/gi, to: "aim to" },
+
+    // Visuals (safe neutral)
+    { re: /\bimage\b/gi, to: "reference image" },
+    { re: /\bscreenshot\b/gi, to: "reference image" },
+
+    // Tech issues
+    { re: /\berror\b/gi, to: "an issue noticed" },
+    { re: /\bproblem\b/gi, to: "a concern identified" },
+
+    // Greetings (normalize only)
+    { re: /^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, to: "Hello" }
+  ];
+
+  RULES.forEach(r => {
+    if (r.re.test(text)) {
+      text = text.replace(r.re, r.to);
     }
   });
 
@@ -177,5 +195,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (selective spam-safe mode)")
+  console.log("🚀 Mail server running (max inbox-safe mode)")
 );
