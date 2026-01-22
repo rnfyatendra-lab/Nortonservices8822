@@ -59,17 +59,17 @@ app.post('/logout', (req, res) => {
 // ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ⚡ SPEED SAME (avg): batch 5 + ~300ms
+// ⚡ SPEED SAME: batch 5 + 300ms
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
     await Promise.allSettled(
       mails.slice(i, i + 5).map(m => transporter.sendMail(m))
     );
-    await delay(300); // keep same
+    await delay(300);
   }
 }
 
-// Subject: short, human, no hype
+// Subject: simple, human-like (no hype)
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -78,45 +78,33 @@ function safeSubject(subject) {
     .trim();
 }
 
-/**
- * Body sanitizer:
- * - Plain text only
- * - Keeps meaning
- * - Softens common spam-prone words contextually
- */
+// Body: plain-text ONLY + spam-safe softening
 function safeBody(message) {
   let t = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // remove odd chars
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  // ===== CONTEXTUAL SOFTENING (meaning preserved) =====
+  // ===== SPAM-SAFE SOFTENING (meaning preserved) =====
   const softenMap = [
-    // Screenshot
-    [/^\s*screenshot\s*$/gim, "a reference image is shared"],
-    [/\bscreenshot\b/gi, "the reference image"],
+    // greetings → neutral
+    [/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello"],
+    [/\b(hey|hi|hello|helllo)\b/gi, "hello"],
 
-    // SEO / Rank
+    // image
+    [/^\s*image\s*$/gim, "a reference image is shared"],
+    [/\bimage\b/gi, "reference image"],
+
+    // common risky words (kept neutral)
+    [/\bscreenshot\b/gi, "reference image"],
     [/\bseo\b/gi, "search visibility"],
     [/\brank\b/gi, "current positioning"],
-
-    // Report / Proposal
-    [/\breport\b/gi, "the summary details"],
-    [/\bproposal\b/gi, "the suggested approach"],
-
-    // Error / Issue
+    [/\breport\b/gi, "summary details"],
+    [/\bproposal\b/gi, "suggested approach"],
     [/\berror\b/gi, "an issue noticed"],
-    [/\bissue\b/gi, "a point to review"],
-
-    // Website / Google
     [/\bwebsite\b/gi, "the site"],
-    [/\bgoogle\b/gi, "the search platform"],
-
-    // Salesy terms toned down
-    [/\bfree\b/gi, "at no additional cost"],
-    [/\burgent\b/gi, "time-sensitive"],
-    [/\bguarantee\b/gi, "aim to"]
+    [/\bgoogle\b/gi, "the search platform"]
   ];
 
   softenMap.forEach(([re, rep]) => {
@@ -149,7 +137,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
-    // 🎯 Safe zone 20–25 (hard stop 27)
+    // Safe zone 20–25 (hard stop 27)
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -157,7 +145,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // Official Gmail SMTP (legit, no spoofing)
+    // Gmail official SMTP
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -165,12 +153,22 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
+    // 🔒 VERIFY APP PASSWORD FIRST
+    try {
+      await transporter.verify();
+    } catch {
+      return res.json({
+        success: false,
+        message: "App Password Wrong ❌"
+      });
+    }
+
     const mails = list.map(r => ({
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email // trust signal
+      replyTo: email
     }));
 
     await sendBatch(transporter, mails);
