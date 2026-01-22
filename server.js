@@ -69,18 +69,18 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (NO AUTO-CHANGE) =====
-// Only light cleanup (keeps user's words)
+// ===== SUBJECT (NO AUTO CHANGE, NO SALESY CLEANUPS) =====
+// Only trims whitespace/newlines; user’s words stay intact.
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
     .replace(/\s{2,}/g, " ")
-    .replace(/[!$%*]{3,}/g, "") // trim excessive hype
     .trim();
 }
 
-// ===== BODY (PLAIN-TEXT, INBOX-FRIENDLY) =====
-// Keeps meaning; softens a few common triggers contextually
+// ===== BODY (PLAIN TEXT ONLY, MINIMAL & NEUTRAL) =====
+// Remove risky transforms; keep message human and simple.
+// Only normalize greetings and obvious visual terms.
 function safeBody(message) {
   let t = (message || "")
     .replace(/\r\n/g, "\n")
@@ -88,26 +88,18 @@ function safeBody(message) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip odd chars
     .trim();
 
-  const softenMap = [
+  // Minimal normalization (meaning preserved)
+  const minimalMap = [
     // greetings → neutral
     [/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello"],
     [/\b(hey|hi|hello|helllo)\b/gi, "hello"],
 
-    // visuals
+    // visuals → neutral wording
     [/\bimage\b/gi, "reference image"],
-    [/\bscreenshot\b/gi, "reference image"],
-
-    // business terms → neutral phrasing (meaning same)
-    [/\bseo\b/gi, "search visibility"],
-    [/\brank\b/gi, "current positioning"],
-    [/\breport\b/gi, "summary details"],
-    [/\bproposal\b/gi, "suggested approach"],
-    [/\berror\b/gi, "an issue noticed"],
-    [/\bgoogle\b/gi, "the search platform"],
-    [/\bwebsite\b/gi, "the site"]
+    [/\bscreenshot\b/gi, "reference image"]
   ];
 
-  softenMap.forEach(([re, rep]) => {
+  minimalMap.forEach(([re, rep]) => {
     t = t.replace(re, rep);
   });
 
@@ -145,7 +137,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // Official Gmail SMTP
+    // Official Gmail SMTP (no spoofing)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -153,7 +145,7 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Verify app password first
+    // Verify app password first (prevent partial sends)
     try {
       await transporter.verify();
     } catch {
@@ -163,7 +155,7 @@ app.post('/send', requireAuth, async (req, res) => {
     const mails = list.map(r => ({
       from: `"${senderName || 'User'}" <${email}>`,
       to: r,
-      subject: safeSubject(subject), // 👈 NO AUTO-CHANGE
+      subject: safeSubject(subject),
       text: safeBody(message),
       replyTo: email // trust signal
     }));
@@ -183,5 +175,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (subject untouched, inbox-friendly)")
+  console.log("🚀 Mail server running (ultra-safe, inbox-friendly)")
 );
