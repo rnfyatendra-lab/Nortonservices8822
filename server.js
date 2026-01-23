@@ -9,7 +9,7 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 🔐 FIXED LOGIN
+// 🔐 FIXED LOGIN (ID & PASSWORD SAME)
 const HARD_USERNAME = "mailinbox@#";
 const HARD_PASSWORD = "mailinbox@#";
 
@@ -26,7 +26,7 @@ app.use(
     resave: false,
     saveUninitialized: true,
     store: sessionStore,
-    cookie: { maxAge: 60 * 60 * 1000 }
+    cookie: { maxAge: 60 * 60 * 1000 } // 1 hour
   })
 );
 
@@ -61,7 +61,7 @@ app.post("/logout", (req, res) => {
 // ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ⚡ SPEED SAME (human-like)
+// ⚡ SPEED SAME: batch 5 + 300ms
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i += 5) {
     await Promise.allSettled(
@@ -79,13 +79,18 @@ function cleanSubject(subject) {
     .trim();
 }
 
-// ===== BODY (USER EXACT, PLAIN TEXT) =====
+// ===== BODY (USER EXACT + SAFE FOOTER) =====
+const SAFE_FOOTER = "Sent securely."; // 3–4 words, neutral
+
 function cleanBody(message) {
-  return (message || "")
+  const body = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
+
+  // Append footer with a clean separation
+  return body ? `${body}\n\n${SAFE_FOOTER}` : SAFE_FOOTER;
 }
 
 function isValidEmail(e) {
@@ -154,5 +159,5 @@ app.post("/send", requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("✅ Clean mail server running (maximum legit inbox safety)")
+  console.log("✅ Clean mail server running (safe footer added)")
 );
