@@ -69,7 +69,8 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (USER WORDS KEPT) =====
+// ===== SUBJECT (EXACT USER INPUT) =====
+// No auto-change, no keyword replacement.
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -77,37 +78,14 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (SELECTIVE, RELATED SAFE WORDS) =====
-// Sirf high-risk words hi replace hote hain (agar present hon).
-// Meaning preserved; baaki text untouched.
+// ===== BODY (EXACT USER INPUT) =====
+// Plain-text only. No word replacement. No footer.
 function safeBody(message) {
-  let text = (message || "")
+  return (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip odd chars
     .trim();
-
-  // normalize greeting only
-  text = text.replace(/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello");
-
-  const MAP = [
-    { re: /\bfree\b/gi, to: "no additional cost" },
-    { re: /\burgent\b/gi, to: "time-sensitive" },
-    { re: /\bguarantee\b/gi, to: "aim to" },
-    { re: /\bdiscount\b/gi, to: "adjusted pricing" },
-    { re: /\boffer\b/gi, to: "an option" },
-    { re: /\bdeal\b/gi, to: "arrangement" },
-    { re: /\bimage\b/gi, to: "reference image" },
-    { re: /\bscreenshot\b/gi, to: "reference image" },
-    { re: /\berror\b/gi, to: "an issue noticed" },
-    { re: /\bproblem\b/gi, to: "a concern identified" }
-  ];
-
-  MAP.forEach(r => {
-    if (r.re.test(text)) text = text.replace(r.re, r.to);
-  });
-
-  return text;
 }
 
 function isValidEmail(e) {
@@ -122,7 +100,7 @@ app.post('/send', requireAuth, async (req, res) => {
       return res.json({ success: false, message: "Missing fields" });
     }
 
-    // ⏱ Hourly reset (no warm-up logic)
+    // ⏱ Hourly reset (NO warm-up)
     const now = Date.now();
     if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
@@ -133,7 +111,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
-    // Safe bulk cap (Gmail-friendly)
+    // Gmail-friendly cap
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -149,7 +127,7 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Verify app password before sending
+    // Verify app password BEFORE sending
     try {
       await transporter.verify();
     } catch {
@@ -161,7 +139,7 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email
+      replyTo: email // trust signal
     }));
 
     await sendBatch(transporter, mails);
@@ -179,5 +157,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (bulk-safe, inbox-friendly)")
+  console.log("🚀 Mail server running (ultra-clean, no auto-changes)")
 );
