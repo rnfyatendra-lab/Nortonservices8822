@@ -71,7 +71,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (USER EXACT) =====
+// ===== SUBJECT (USER EXACT, MIN CLEANUP) =====
 function cleanSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -80,7 +80,7 @@ function cleanSubject(subject) {
 }
 
 // ===== BODY (USER EXACT + SAFE FOOTER) =====
-const SAFE_FOOTER = "Sent securely."; // 3–4 words, neutral
+const SAFE_FOOTER = "Secure message sent."; // 3–4 words, neutral & safe
 
 function cleanBody(message) {
   const body = (message || "")
@@ -89,7 +89,6 @@ function cleanBody(message) {
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  // Append footer with a clean separation
   return body ? `${body}\n\n${SAFE_FOOTER}` : SAFE_FOOTER;
 }
 
@@ -116,7 +115,7 @@ app.post("/send", requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
-    // Gmail-safe cap
+    // Gmail-friendly cap
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -131,6 +130,7 @@ app.post("/send", requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
+    // Verify App Password first
     try {
       await transporter.verify();
     } catch {
