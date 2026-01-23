@@ -69,7 +69,7 @@ async function sendBatch(transporter, mails) {
   }
 }
 
-// ===== SUBJECT (USER WORDS KEPT, MIN CLEANUP) =====
+// ===== SUBJECT (USER WORDS KEPT) =====
 function safeSubject(subject) {
   return (subject || "Hello")
     .replace(/\r?\n/g, " ")
@@ -77,20 +77,19 @@ function safeSubject(subject) {
     .trim();
 }
 
-// ===== BODY (ULTRA-MINIMAL, CONTEXT-AWARE) =====
-// Only change truly spam-prone words, only if present.
-// No aggressive rewriting.
+// ===== BODY (SELECTIVE, RELATED SAFE WORDS) =====
+// Sirf high-risk words hi replace hote hain (agar present hon).
+// Meaning preserved; baaki text untouched.
 function safeBody(message) {
   let text = (message || "")
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "") // strip odd chars
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .trim();
 
-  // Normalize greetings (very light)
+  // normalize greeting only
   text = text.replace(/^\s*(hey|hi|hello|helllo)\b[!,.]*/gim, "Hello");
 
-  // Context-aware replacements (ONLY if word exists)
   const MAP = [
     { re: /\bfree\b/gi, to: "no additional cost" },
     { re: /\burgent\b/gi, to: "time-sensitive" },
@@ -123,7 +122,7 @@ app.post('/send', requireAuth, async (req, res) => {
       return res.json({ success: false, message: "Missing fields" });
     }
 
-    // ⏱ Hourly reset
+    // ⏱ Hourly reset (no warm-up logic)
     const now = Date.now();
     if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
       mailLimits[email] = { count: 0, start: now };
@@ -134,7 +133,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(isValidEmail);
 
-    // Safe zone 20–25 (hard stop 27)
+    // Safe bulk cap (Gmail-friendly)
     if (mailLimits[email].count + list.length > 27) {
       return res.json({
         success: false,
@@ -142,7 +141,7 @@ app.post('/send', requireAuth, async (req, res) => {
       });
     }
 
-    // Official Gmail SMTP
+    // Official Gmail SMTP only
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -150,7 +149,7 @@ app.post('/send', requireAuth, async (req, res) => {
       auth: { user: email, pass: password }
     });
 
-    // Verify app password first
+    // Verify app password before sending
     try {
       await transporter.verify();
     } catch {
@@ -162,7 +161,7 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: safeSubject(subject),
       text: safeBody(message),
-      replyTo: email // trust signal
+      replyTo: email
     }));
 
     await sendBatch(transporter, mails);
@@ -180,5 +179,5 @@ app.post('/send', requireAuth, async (req, res) => {
 
 // ================= START =================
 app.listen(PORT, () =>
-  console.log("🚀 Mail server running (ultra-clean, inbox-friendly)")
+  console.log("🚀 Mail server running (bulk-safe, inbox-friendly)")
 );
