@@ -1,31 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Login</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Login — Fast Mailer</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="login-box">
-  <h2>Secure Access</h2>
+<div class="form-box">
+  <h2>🔒 Login</h2>
   <input id="username" placeholder="Username">
   <input id="password" type="password" placeholder="Password">
-  <button onclick="login()">Login</button>
+  <button id="loginBtn">Login</button>
+  <p id="loginStatus"></p>
 </div>
 
 <script>
-function login(){
-  fetch('/login', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      username: username.value,
-      password: password.value
-    })
-  }).then(r=>r.json()).then(d=>{
-    if(d.success) location.href='/launcher';
-    else alert(d.message);
-  });
-}
+document.getElementById('loginBtn').addEventListener('click', () => {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value.trim();
+  fetch('/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password})})
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.success) window.location.href='/launcher';
+      else document.getElementById('loginStatus').innerText=data.message;
+    });
+});
 </script>
 </body>
 </html>
