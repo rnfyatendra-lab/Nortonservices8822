@@ -1,163 +1,285 @@
-// server.js
-require("dotenv").config();
+"use strict";
+
 const express = require("express");
 const session = require("express-session");
-const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = 8080;
 
-// 🔐 FIXED LOGIN (ID & PASSWORD SAME)
-const HARD_USERNAME = "mailinbox@#";
-const HARD_PASSWORD = "mailinbox@#";
+/* ================= CONFIG ================= */
 
-// ================= STATE =================
-let mailLimits = {}; // { gmail: { count, start } }
-const sessionStore = new session.MemoryStore();
+const ADMIN_LOGIN = "#$@$#@$@@%%@%@$%@A";
 
-// ================= MIDDLEWARE =================
-app.use(bodyParser.json({ limit: "100kb" }));
+const SESSION_SECRET = crypto.randomBytes(32).toString("hex");
+const SESSION_TIME = 60 * 60 * 1000;
+
+const BATCH_SIZE = 5;
+const BATCH_DELAY = 300;
+
+const DAILY_LIMIT = 500;
+
+/* ================= EXPRESS ================= */
+
+app.disable("x-powered-by");
+
+app.use(express.json({ limit: "25kb" }));
+app.use(express.urlencoded({ extended: false, limit: "25kb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
 app.use(
   session({
-    secret: "clean-mailer-secret",
+    name: "secure.sid",
+    secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
-    store: sessionStore,
-    cookie: { maxAge: 60 * 60 * 1000 } // 1 hour
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: "strict",
+      maxAge: SESSION_TIME
+    }
   })
 );
 
-// ================= AUTH =================
-function requireAuth(req, res, next) {
-  if (req.session.user) return next();
-  return res.redirect("/");
-}
+/* ================= SECURITY HEADERS ================= */
 
-// ================= ROUTES =================
-app.get("/", (req, res) =>
-  res.sendFile(path.join(__dirname, "public", "login.html"))
-);
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 
-app.post("/login", (req, res) => {
-  const { username, password } = req.body;
-  if (username === HARD_USERNAME && password === HARD_PASSWORD) {
-    req.session.user = username;
-    return res.json({ success: true });
+/* ================= RATE LIMIT ================= */
+
+const ipLimiter = new Map();
+
+app.use((req, res, next) => {
+
+  const ip = req.ip;
+  const now = Date.now();
+  const record = ipLimiter.get(ip);
+
+  if (!record || now - record.start > 60000) {
+    ipLimiter.set(ip, { count: 1, start: now });
+    return next();
   }
-  return res.json({ success: false });
+
+  if (record.count > 100) {
+    return res.status(429).send("Too many requests");
+  }
+
+  record.count++;
+
+  next();
 });
 
-app.get("/launcher", requireAuth, (req, res) =>
-  res.sendFile(path.join(__dirname, "public", "launcher.html"))
-);
+/* ================= HELPERS ================= */
 
-app.post("/logout", (req, res) => {
-  req.session.destroy(() => res.json({ success: true }));
-});
-
-// ================= HELPERS =================
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// ⚡ SPEED SAME: batch 5 + 300ms
-async function sendBatch(transporter, mails) {
-  for (let i = 0; i < mails.length; i += 5) {
-    await Promise.allSettled(
-      mails.slice(i, i + 5).map(m => transporter.sendMail(m))
-    );
-    await delay(300);
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function cleanHeader(text = "", max = 120) {
+  return text.replace(/[\r\n]/g, "").trim().slice(0, max);
+}
+
+function preserveText(text = "", max = 20000) {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").slice(0, max);
+}
+
+/* ================= DAILY LIMIT ================= */
+
+const dailyCounter = new Map();
+
+function checkDailyLimit(sender, amount) {
+
+  const now = Date.now();
+  const record = dailyCounter.get(sender);
+
+  if (!record || now - record.start > 86400000) {
+    dailyCounter.set(sender, { count: 0, start: now });
   }
+
+  const updated = dailyCounter.get(sender);
+
+  if (updated.count + amount > DAILY_LIMIT) {
+    return false;
+  }
+
+  updated.count += amount;
+
+  return true;
 }
 
-// ===== SUBJECT (USER EXACT, MIN CLEANUP) =====
-function cleanSubject(subject) {
-  return (subject || "Hello")
-    .replace(/\r?\n/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+/* ================= AUTH ================= */
+
+function requireAuth(req, res, next) {
+
+  if (req.session.user === ADMIN_LOGIN) return next();
+
+  res.redirect("/");
 }
 
-// ===== BODY (USER EXACT + SAFE FOOTER) =====
-const SAFE_FOOTER = "Secure message sent."; // 3–4 words, neutral & safe
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/login.html"));
+});
 
-function cleanBody(message) {
-  const body = (message || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
-    .trim();
+app.post("/login", (req, res) => {
 
-  return body ? `${body}\n\n${SAFE_FOOTER}` : SAFE_FOOTER;
-}
+  const { username, password } = req.body || {};
 
-function isValidEmail(e) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-}
+  if (username === ADMIN_LOGIN && password === ADMIN_LOGIN) {
 
-// ================= SEND =================
+    req.session.user = ADMIN_LOGIN;
+
+    return res.json({ success: true });
+  }
+
+  res.json({ success: false });
+});
+
+app.get("/launcher", requireAuth, (req, res) => {
+
+  res.sendFile(path.join(__dirname, "public/launcher.html"));
+
+});
+
+app.post("/logout", (req, res) => {
+
+  req.session.destroy(() => {
+
+    res.clearCookie("secure.sid");
+
+    res.json({ success: true });
+
+  });
+
+});
+
+/* ================= SEND MAIL ================= */
+
 app.post("/send", requireAuth, async (req, res) => {
+
   try {
-    const { senderName, email, password, recipients, subject, message } = req.body;
+
+    const { senderName, email, password, recipients, subject, message } =
+      req.body || {};
+
     if (!email || !password || !recipients) {
-      return res.json({ success: false });
+
+      return res.json({ success: false, message: "Missing fields" });
+
     }
 
-    // ⏱ Hourly reset
-    const now = Date.now();
-    if (!mailLimits[email] || now - mailLimits[email].start > 3600000) {
-      mailLimits[email] = { count: 0, start: now };
+    if (!emailRegex.test(email)) {
+
+      return res.json({ success: false, message: "Invalid email" });
+
     }
 
-    const list = recipients
-      .split(/[\n,]+/)
-      .map(r => r.trim())
-      .filter(isValidEmail);
+    const list = [
+      ...new Set(
+        recipients
+          .split(/[\n,]+/)
+          .map(r => r.trim())
+          .filter(r => emailRegex.test(r))
+      )
+    ];
 
-    // Gmail-friendly cap
-    if (mailLimits[email].count + list.length > 27) {
-      return res.json({
-        success: false,
-        message: `Limit Full ❌ (${mailLimits[email].count}/27)`
-      });
+    if (!list.length) {
+
+      return res.json({ success: false, message: "No recipients" });
+
+    }
+
+    if (!checkDailyLimit(email, list.length)) {
+
+      return res.json({ success: false, message: "Daily limit reached" });
+
     }
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: email, pass: password }
+
+      service: "gmail",
+
+      auth: {
+
+        user: email,
+
+        pass: password
+
+      }
+
     });
 
-    // Verify App Password first
-    try {
-      await transporter.verify();
-    } catch {
-      return res.json({ success: false, message: "App Password Wrong ❌" });
+    await transporter.verify();
+
+    const finalName = cleanHeader(senderName || email);
+    const finalSubject = cleanHeader(subject || "Message");
+    const finalText = preserveText(message || "");
+
+    let sent = 0;
+
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+
+      const batch = list.slice(i, i + BATCH_SIZE);
+
+      const result = await Promise.allSettled(
+
+        batch.map(to =>
+          transporter.sendMail({
+
+            from: `"${finalName}" <${email}>`,
+
+            to,
+
+            subject: finalSubject,
+
+            text: finalText
+
+          })
+        )
+      );
+
+      result.forEach(r => {
+
+        if (r.status === "fulfilled") sent++;
+
+      });
+
+      await delay(BATCH_DELAY);
+
     }
 
-    const mails = list.map(r => ({
-      from: `"${senderName || "User"}" <${email}>`,
-      to: r,
-      subject: cleanSubject(subject),
-      text: cleanBody(message),
-      replyTo: email
-    }));
+    res.json({
 
-    await sendBatch(transporter, mails);
-    mailLimits[email].count += list.length;
-
-    return res.json({
       success: true,
-      message: `Mail sent ✅ (${mailLimits[email].count}/27)`
+
+      message: `Send ${sent}`
+
     });
-  } catch (e) {
-    return res.json({ success: false });
+
+  } catch (err) {
+
+    res.json({
+
+      success: false,
+
+      message: "Sending failed"
+
+    });
+
   }
+
 });
 
-// ================= START =================
-app.listen(PORT, () =>
-  console.log("✅ Clean mail server running (safe footer added)")
-);
+/* ================= START ================= */
+
+app.listen(PORT, () => {
+
+  console.log("Server running on port " + PORT);
+
+});
