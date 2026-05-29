@@ -1,30 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Mail Dispatch Panel</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Fast Mail Launcher</title>
+<link rel="stylesheet" href="style.css">
+
+<style>
+  /* Optional UX hint */
+  .logout-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+</style>
 </head>
+
 <body>
-<div class="page">
-  <div class="card">
-    <h2 class="title">📨 Mail Dispatch Panel</h2>
+<div class="form-grid">
+  <h2>📧 Fast Mail Launcher</h2>
 
-    <div class="form-grid">
-      <input id="senderName" placeholder="Sender Name">
-      <input id="email" placeholder="Gmail">
-      <input id="password" type="password" placeholder="App Password">
-      <input id="subject" placeholder="Subject">
-      <textarea id="message" placeholder="Message"></textarea>
-      <textarea id="recipients" placeholder="Recipients"></textarea>
-    </div>
+  <div class="grid-row">
+    <input id="senderName" placeholder="Sender Name">
+    <input id="email" placeholder="Your Gmail">
+  </div>
 
-    <div class="btn-row">
-      <button id="sendBtn">Send</button>
-      <button ondblclick="logout()">Logout</button>
+  <div class="grid-row">
+    <input id="pass" type="password" placeholder="App Password">
+    <input id="subject" placeholder="Subject">
+  </div>
+
+  <div class="grid-row">
+    <textarea id="message" placeholder="Message Body"></textarea>
+    <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
+  </div>
+
+  <div class="grid-row">
+    <button id="sendBtn">Send All</button>
+
+    <!-- 🔓 DOUBLE CLICK LOGOUT BUTTON -->
+    <div>
+      <button id="logoutBtn" title="Double click to logout">Logout</button>
+      <div class="logout-hint">Double-click to logout</div>
     </div>
   </div>
+
+  <p id="statusMessage"></p>
 </div>
 
 <script src="script.js"></script>
+
+<script>
+/* ===============================
+   DOUBLE-CLICK LOGOUT LOGIC
+================================ */
+
+const logoutBtn = document.getElementById("logoutBtn");
+
+logoutBtn.addEventListener("dblclick", () => {
+  fetch("/logout", { method: "POST" })
+    .then(res => res.json())
+    .then(data => {
+      alert(data.message);
+      if (data.success) {
+        window.location.href = "/";
+      }
+    })
+    .catch(() => {
+      alert("Logout failed");
+    });
+});
+</script>
+
 </body>
 </html>
