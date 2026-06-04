@@ -4,17 +4,7 @@
 <meta charset="UTF-8">
 <title>Fast Mail Launcher</title>
 <link rel="stylesheet" href="style.css">
-
-<style>
-  /* Optional UX hint */
-  .logout-hint {
-    font-size: 12px;
-    color: #888;
-    margin-top: 4px;
-  }
-</style>
 </head>
-
 <body>
 <div class="form-grid">
   <h2>📧 Fast Mail Launcher</h2>
@@ -36,40 +26,12 @@
 
   <div class="grid-row">
     <button id="sendBtn">Send All</button>
-
-    <!-- 🔓 DOUBLE CLICK LOGOUT BUTTON -->
-    <div>
-      <button id="logoutBtn" title="Double click to logout">Logout</button>
-      <div class="logout-hint">Double-click to logout</div>
-    </div>
+    <button onclick="logout()">Logout</button>
   </div>
 
   <p id="statusMessage"></p>
 </div>
 
 <script src="script.js"></script>
-
-<script>
-/* ===============================
-   DOUBLE-CLICK LOGOUT LOGIC
-================================ */
-
-const logoutBtn = document.getElementById("logoutBtn");
-
-logoutBtn.addEventListener("dblclick", () => {
-  fetch("/logout", { method: "POST" })
-    .then(res => res.json())
-    .then(data => {
-      alert(data.message);
-      if (data.success) {
-        window.location.href = "/";
-      }
-    })
-    .catch(() => {
-      alert("Logout failed");
-    });
-});
-</script>
-
 </body>
 </html>
