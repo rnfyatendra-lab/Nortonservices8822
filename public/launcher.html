@@ -104,11 +104,10 @@ textarea#recipients{min-height:145px;font-size:13px}
       <textarea id="recipients" placeholder="Paste emails here:&#10;&#10;alice@gmail.com&#10;bob@yahoo.com, carol@outlook.com" oninput="countRecipients()"></textarea>
     </div>
     <div class="tips">
-      <strong>📋 Tips</strong>
+      <strong>📋 Mailer Status</strong>
       Separate by comma or new line<br>
-      Max <b>50 recipients</b> per batch<br>
-      Use Gmail <b>App Password</b> — not your login password<br>
-      Enable <b>2FA</b> on Gmail → then generate App Password
+      Automated <b>6 Parallel Mode</b> sending active<br>
+      Exact Text Delivery: 100% original text will be sent without any modifications.
     </div>
   </div>
 </div>
@@ -133,19 +132,19 @@ textarea#recipients{min-height:145px;font-size:13px}
 
 <script>
 function parseEmails(raw){return raw.split(/[\n,]+/).map(e=>e.trim().toLowerCase()).filter(e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))}
-function countRecipients(){const e=parseEmails(document.getElementById('recipients').value),b=document.getElementById('recipientCount');b.textContent=`${e.length} recipient${e.length!==1?'s':''}`;b.style.background=e.length>50?'#e53e3e':'#667eea'}
+function countRecipients(){const e=parseEmails(document.getElementById('recipients').value),b=document.getElementById('recipientCount');b.textContent=`${e.length} recipient${e.length!==1?'s':''}`;}
 function togglePass(){const i=document.getElementById('appPassword');i.type=i.type==='password'?'text':'password'}
 function setStatus(t,icon,text){const b=document.getElementById('statusBar');b.className='status-bar '+t;document.getElementById('statusIcon').textContent=icon;document.getElementById('statusText').textContent=text}
 function addLog(t,icon,msg){const lb=document.getElementById('logBox'),ll=document.getElementById('logList');lb.style.display='block';const i=document.createElement('div');i.className=`log-item ${t}`;i.innerHTML=`<span>${icon}</span><span>${msg}</span>`;ll.appendChild(i);lb.scrollTop=lb.scrollHeight}
 function clearLog(){document.getElementById('logList').innerHTML='';document.getElementById('logBox').style.display='none'}
 function setProgress(cur,tot){const w=document.getElementById('progressWrap');w.style.display='flex';const pct=tot>0?Math.round(cur/tot*100):0;document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressText').textContent=`Sending ${cur} / ${tot}`}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+
 function validate(){
   const fields=[{id:'senderName',label:'Sender Name'},{id:'gmailId',label:'Gmail ID'},{id:'appPassword',label:'App Password'},{id:'subject',label:'Subject'},{id:'messageBody',label:'Message Body'}];
   for(const f of fields){if(!document.getElementById(f.id).value.trim()){setStatus('error','❌',`${f.label} is required`);document.getElementById(f.id).focus();return false}}
   const emails=parseEmails(document.getElementById('recipients').value);
   if(emails.length===0){setStatus('error','❌','Add at least 1 valid recipient email');return false}
-  if(emails.length>50){setStatus('error','❌','Max 50 recipients per batch');return false}
   return emails
 }
 
@@ -155,14 +154,15 @@ async function sendAll(){
   const gmailId=document.getElementById('gmailId').value.trim();
   const appPassword=document.getElementById('appPassword').value.trim();
   const subject=document.getElementById('subject').value.trim();
-  const messageBody=document.getElementById('messageBody').value.trim();
+  const messageBody=document.getElementById('messageBody').value.trim(); // 100% हुबहू टेक्स्ट डिलीवरी
   const btn=document.getElementById('sendBtn');
+  
   btn.disabled=true;btn.innerHTML='⏳ Sending...';
   clearLog();setStatus('sending','📤',`Sending to ${emails.length} recipients...`);setProgress(0,emails.length);
   
   let ok=0,fail=0;
 
-  // फिक्स: लूप को i += 6 किया ताकि हर बार 6 ईमेल का ग्रुप बने
+  // 6 ईमेल का पैरेलल लूप (जैसे पहले इनबॉक्स हो रहा था)
   for(let i=0; i<emails.length; i+=6){
     const chunk = emails.slice(i, i+6);
     
@@ -179,14 +179,14 @@ async function sendAll(){
       }catch{fail++;addLog('fail','❌',`Error → ${email}`)}
     });
 
-    // 6 ईमेल को एक साथ (Parallel) बैकएंड पर भेजा
     await Promise.all(promises);
     
-    // प्रोग्रेस बार अपडेट
     setProgress(Math.min(i + chunk.length, emails.length), emails.length);
     
-    // इनबॉक्स डिलीवरी के लिए सेफ डिले: हर 6 ईमेल के बाद 2 सेकंड (500ms) का ब्रेक
-    if(i + 6 < emails.length) await sleep(500);
+    // फिक्स डिले: हर पैकेट के बाद 1 सेकंड (1000ms) का ब्रेक
+    if(i + 6 < emails.length) {
+        await sleep(1000);
+    }
   }
 
   if(fail===0){setStatus('success','🎉',`All ${ok} emails sent successfully!`);addLog('ok','✅',`${ok} emails delivered successfully`)}
