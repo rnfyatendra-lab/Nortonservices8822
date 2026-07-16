@@ -18,23 +18,26 @@ app.use(session({
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Global memory to track email timestamps per Gmail ID
+const emailTimestamps = {}; 
+const LIMIT_WINDOW = 12 * 60 * 60 * 1000; // 12 Hours in milliseconds
+const MAX_EMAILS = 26; // Hard limit
+
 // Global cache for transporters to reuse SMTP connections
 const transporterCache = {};
 
 function getTransporter(gmailId, appPassword) {
   const cacheKey = `${gmailId}:${appPassword}`;
-  
   if (!transporterCache[cacheKey]) {
-    // Creating a reusable pooled connection
     transporterCache[cacheKey] = nodemailer.createTransport({
       service: 'gmail',
-      pool: true,             // Enable pooling! Keeps connection open
-      maxConnections: 6,      // Matches your frontend parallel limit (6)
-      maxMessages: 100,       // Max emails per connection before recycling
-      rateLimit: 6,           // Max emails per second
+      pool: true,             
+      maxConnections: 6,      
+      maxMessages: 100,       
+      rateLimit: 6,           
       auth: { user: gmailId, pass: appPassword }
     });
-    console.log(`📡 New pooled SMTP connection established for: ${gmailId}`);
+    console.log(`📡 New SMTP pool created for: ${gmailId}`);
   }
   return transporterCache[cacheKey];
 }
@@ -73,7 +76,27 @@ app.post('/api/send-email', requireLogin, async (req, res) => {
   if (!gmailId || !appPassword || !to)
     return res.status(400).json({ success: false, message: 'Missing fields' });
 
-  // Reusing the pooled connection instead of recreating it every time
+  const now = Date.now();
+
+  // Initialize tracker for this Gmail ID if it doesn't exist
+  if (!emailTimestamps[gmailId]) {
+    emailTimestamps[gmailId] = [];
+  }
+
+  // Filter out timestamps older than 12 hours
+  emailTimestamps[gmailId] = emailTimestamps[gmailId].filter(
+    (timestamp) => now - timestamp < LIMIT_WINDOW
+  );
+
+  // Check if limit exceeded
+  if (emailTimestamps[gmailId].length >= MAX_EMAILS) {
+    console.warn(`⚠️ Limit Exceeded for ${gmailId}: Tried to send more than ${MAX_EMAILS} emails in 12 hours.`);
+    return res.status(429).json({ 
+      success: false, 
+      message: `Limit Exceeded: Max ${MAX_EMAILS} emails per 12 hours allowed for this ID.` 
+    });
+  }
+
   const transporter = getTransporter(gmailId, appPassword);
 
   try {
@@ -82,13 +105,16 @@ app.post('/api/send-email', requireLogin, async (req, res) => {
       to,
       subject,
       text: messageBody,
-      // Essential headers for high deliverability (making it look like Outlook/Gmail manual mail)
       headers: {
         'X-Mailer': 'Microsoft Outlook 16.0', 
-        'X-Priority': '3', // Normal Priority
+        'X-Priority': '3', 
         'Priority': 'normal'
       }
     });
+
+    // Record the successful send timestamp
+    emailTimestamps[gmailId].push(Date.now());
+    
     res.json({ success: true });
   } catch (err) {
     console.error(`❌ ${to}:`, err.message);
@@ -96,4 +122,4 @@ app.post('/api/send-email', requireLogin, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 Optimized Fast Mailer on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Safety-Locked Fast Mailer on port ${PORT}`));
