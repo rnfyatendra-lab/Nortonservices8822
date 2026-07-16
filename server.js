@@ -18,6 +18,27 @@ app.use(session({
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Global cache for transporters to reuse SMTP connections
+const transporterCache = {};
+
+function getTransporter(gmailId, appPassword) {
+  const cacheKey = `${gmailId}:${appPassword}`;
+  
+  if (!transporterCache[cacheKey]) {
+    // Creating a reusable pooled connection
+    transporterCache[cacheKey] = nodemailer.createTransport({
+      service: 'gmail',
+      pool: true,             // Enable pooling! Keeps connection open
+      maxConnections: 6,      // Matches your frontend parallel limit (6)
+      maxMessages: 100,       // Max emails per connection before recycling
+      rateLimit: 6,           // Max emails per second
+      auth: { user: gmailId, pass: appPassword }
+    });
+    console.log(`📡 New pooled SMTP connection established for: ${gmailId}`);
+  }
+  return transporterCache[cacheKey];
+}
+
 function requireLogin(req, res, next) {
   if (req.session?.loggedIn) return next();
   res.redirect('/');
@@ -52,19 +73,21 @@ app.post('/api/send-email', requireLogin, async (req, res) => {
   if (!gmailId || !appPassword || !to)
     return res.status(400).json({ success: false, message: 'Missing fields' });
 
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: gmailId, pass: appPassword }
-  });
+  // Reusing the pooled connection instead of recreating it every time
+  const transporter = getTransporter(gmailId, appPassword);
 
   try {
     await transporter.sendMail({
       from: senderName ? `"${senderName}" <${gmailId}>` : `"${gmailId}" <${gmailId}>`,
       to,
       subject,
-      text: messageBody
-      // HTML nahi — plain text = personal email = Primary inbox
-      // Koi bulk/newsletter headers nahi
+      text: messageBody,
+      // Essential headers for high deliverability (making it look like Outlook/Gmail manual mail)
+      headers: {
+        'X-Mailer': 'Microsoft Outlook 16.0', 
+        'X-Priority': '3', // Normal Priority
+        'Priority': 'normal'
+      }
     });
     res.json({ success: true });
   } catch (err) {
@@ -73,4 +96,4 @@ app.post('/api/send-email', requireLogin, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 Fast Mailer on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Optimized Fast Mailer on port ${PORT}`));
